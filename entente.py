@@ -30,38 +30,44 @@ def run():
 
         data = []
         
-        # On récupère le nombre total de lignes de joueurs
-        player_rows = page.locator("div[class*='css-g5y9jx']").all()
-        print(f"Nombre de joueurs détectés dans la liste : {len(player_rows)}")
+        # On cible uniquement les lignes de joueurs situées dans le contenu principal (on évite le header/footer)
+        # Sur Virtuafoot, les lignes de joueurs ont une structure bien précise avec des pourcentages de forme ou des notes
+        player_rows = page.locator("#mainbrowse div[class*='css-g5y9jx'], #content div[class*='css-g5y9jx']").all()
+        print(f"Lignes de joueurs détectées : {len(player_rows)}")
+
+        seen_players = set()
 
         for i in range(len(player_rows)):
             try:
-                # Clic JavaScript direct sur l'élément i pour contourner les interférences de pointeur
+                # Clic sur la ligne du joueur via JavaScript
                 page.evaluate(f"""
-                    const rows = document.querySelectorAll("div[class*='css-g5y9jx']");
+                    const rows = document.querySelectorAll("#mainbrowse div[class*='css-g5y9jx'], #content div[class*='css-g5y9jx']");
                     if (rows[{i}]) {{
                         rows[{i}].click();
                     }}
                 """)
-                
-                # Pause pour laisser le panneau/stats du joueur s'ouvrir ou se mettre à jour
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(1500)
 
-                # Récupération du texte de la ligne active
-                current_rows = page.locator("div[class*='css-g5y9jx']").all()
+                # Extraction du texte de la ligne active
+                current_rows = page.locator("#mainbrowse div[class*='css-g5y9jx'], #content div[class*='css-g5y9jx']").all()
                 if i < len(current_rows):
-                    active_text = current_rows[i].inner_text().strip()
-                    cols = [c.strip() for c in active_text.split("\n") if c.strip()]
-                    cols = [c for c in cols if len(c) < 50]
+                    text = current_rows[i].inner_text().strip()
+                    if text:
+                        cols = [c.strip() for c in text.split("\n") if c.strip()]
+                        # On filtre pour ne garder que les lignes de joueurs valides (présence d'un nom et d'une stat/pourcentage)
+                        cols = [c for c in cols if len(c) < 40 and "POINTS" not in c and "CLUBS" not in c and "ONLINE" not in c]
 
-                    if cols and cols not in data:
-                        data.append(cols)
+                        if len(cols) >= 3:
+                            player_name = cols[1] if len(cols) > 1 else cols[0]
+                            if player_name not in seen_players:
+                                seen_players.add(player_name)
+                                data.append(cols)
 
             except Exception as e:
-                print(f"Erreur lors du traitement du joueur {i+1}: {e}")
+                print(f"Erreur sur la ligne {i+1}: {e}")
                 continue
 
-        print(f"Total de lignes de joueurs récupérées : {len(data)}")
+        print(f"Total de joueurs propres récupérés : {len(data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and data:
