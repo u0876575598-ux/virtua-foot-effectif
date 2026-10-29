@@ -25,26 +25,27 @@ def run():
         # Accès à la page des joueurs
         print("Récupération de l'effectif...")
         page.goto("https://www.virtuafoot.com/joueurs?view=niv")
-        page.wait_for_selector("table", timeout=10000)
+        
+        # Attente de la présence du contenu du tableau (on élargit au conteneur ou à n'importe quel tableau présent)
+        page.wait_for_load_selector = page.wait_for_selector("table, .tableau, div#content", timeout=15000)
 
-        # Extraction des données du tableau
+        # Extraction des données du tableau principal de l'effectif
         rows = page.locator("table tr").all()
         data = []
 
         for row in rows:
-            # Récupère le texte de chaque cellule (th et td)
             cells = row.locator("th, td").all_text_contents()
             cleaned_cells = [cell.strip().replace("\n", " ") for cell in cells if cell.strip()]
             if cleaned_cells:
                 data.append(cleaned_cells)
 
-        # Ecriture des données dans le fichier CSV
+        # Sauvegarde dans le CSV attendu par GitHub Actions
         csv_filename = "virtuafoot_effectif.csv"
         with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerows(data)
 
-        print(f"Fichier {csv_filename} généré avec succès avec {len(data)} lignes !")
+        print(f"Fichier {csv_filename} généré avec succès ({len(data)} lignes enregistrées) !")
         browser.close()
 
 if __name__ == "__main__":
