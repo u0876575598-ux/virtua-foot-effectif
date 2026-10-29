@@ -4,9 +4,9 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-# Identifiants Virtuafoot (lus depuis les variables d'environnement ou remplacés directement)
-USERNAME = os.getenv("VF_USERNAME", "votre_identifiant")
-PASSWORD = os.getenv("VF_PASSWORD", "votre_mot_de_passe")
+# Récupération de vos identifiants depuis votre configuration existante
+USERNAME = os.getenv("VF_USERNAME")
+PASSWORD = os.getenv("VF_PASSWORD")
 
 def run():
     with sync_playwright() as p:
@@ -17,12 +17,12 @@ def run():
         print("Connexion à Virtuafoot...")
         page.goto("https://www.virtuafoot.com/#login")
 
-        # Remplissage des identifiants
+        # Remplissage automatique avec vos identifiants
         page.fill("input[name='username']", USERNAME)
         page.fill("input[name='password']", PASSWORD)
         page.click("button[type='submit']")
 
-        # Attente après connexion
+        # Attente de la connexion
         page.wait_for_timeout(3000)
 
         print("Accès à la page des niveaux du joueur...")
