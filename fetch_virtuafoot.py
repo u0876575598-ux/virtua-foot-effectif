@@ -6,28 +6,24 @@ PASSWORD = os.environ.get("VF_PASSWORD")
 
 def run():
     with sync_playwright() as p:
-        # Lancement du navigateur
         browser = p.chromium.launch(headless=True)
         page = browser.new_context().new_page()
 
         print("Connexion à Virtuafoot...")
         page.goto("https://www.virtuafoot.com/")
 
-        # Attente du formulaire de connexion
-        page.wait_for_selector("form", timeout=10000)
+        # On cible directement les champs du formulaire de login par leur nom ou identifiant dans le DOM (même masqué)
+        page.fill("form#login input[type='text'], form#login input[name='login'], input[name='login']", USERNAME)
+        page.fill("form#login input[type='password'], form#login input[name='pass'], input[name='pass']", PASSWORD)
         
-        # Remplissage des champs avec des sélecteurs génériques robustes
-        page.locator("input[type='text'], input[type='email']").first.fill(USERNAME)
-        page.locator("input[type='password']").first.fill(PASSWORD)
-        
-        # Validation
-        page.locator("button[type='submit'], input[type='submit']").first.click()
+        # Soumission du formulaire
+        page.locator("form#login button[type='submit'], form#login input[type='submit'], button:has-text('Connexion')").first.click()
 
-        # Attente post-connexion (ajustez selon votre redirection, par ex. 'joueurs')
+        # Attente de la redirection vers l'espace connecté (ex: page joueurs)
         page.wait_for_url("**/joueurs*", timeout=15000)
         print("Connecté avec succès !")
         
-        # --- Insérez ici la suite de votre code pour extraire les données et générer le CSV ---
+        # --- Insérez la suite de votre code de scraping et d'export CSV ici ---
 
         browser.close()
 
