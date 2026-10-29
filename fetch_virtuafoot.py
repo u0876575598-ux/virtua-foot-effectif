@@ -22,21 +22,26 @@ def run():
         page.wait_for_url("**/#news*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page des joueurs via la navigation SPA interne
+        # Accès à la page de l'effectif via le hash SPA
         print("Récupération de l'effectif...")
-        
-        # Navigation vers l'ancrage interne
         page.goto("https://www.virtuafoot.com/#joueurs?view=niv")
         
-        # Attente active du chargement du contenu dans le DOM
-        page.wait_for_timeout(4000) # Pause de 4s pour laisser le script AJAX remplir le tableau
-        
-        # Si la table n'apparaît pas, on essaie de forcer le clic sur le lien 'Joueurs' du menu
-        if page.locator("tr").count() < 2:
-            page.locator("a[href*='joueurs']").first.click()
-            page.wait_for_timeout(3000)
+        # On attend l'apparition effective d'une ligne de tableau contenant des données de joueurs (td)
+        try:
+            page.wait_for_selector("table tr td", timeout=15000)
+        except Exception:
+            print("Délai d'attente dépassé pour le tableau, tentative de clic de secours...")
+            # Si le hash direct ne suffit pas, on simule un clic sur le menu Joueurs
+            try:
+                page.locator("a[href*='joueurs']").first.click()
+                page.wait_for_selector("table tr td", timeout=10000)
+            except Exception:
+                pass
 
-        # Récupération de toutes les lignes du tableau
+        # Petite pause de sécurité pour s'assurer que toutes les lignes AJAX sont bien rendues
+        page.wait_for_timeout(3000)
+
+        # Extraction des lignes du tableau
         rows = page.locator("tr").all()
         data = []
 
@@ -46,7 +51,7 @@ def run():
             if cleaned_cells:
                 data.append(cleaned_cells)
 
-        # Sauvegarde dans le CSV
+        # Sauvegarde du fichier CSV
         csv_filename = "virtuafoot_effectif.csv"
         with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
