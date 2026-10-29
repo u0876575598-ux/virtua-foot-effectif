@@ -23,59 +23,76 @@ def run():
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page de l'entente
+        # Accès à la page de sélection / entente
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
         page.wait_for_timeout(8000)
 
-        data = []
+        all_players_data = []
         
-        # On cible uniquement les lignes de joueurs situées dans le contenu principal (on évite le header/footer)
-        # Sur Virtuafoot, les lignes de joueurs ont une structure bien précise avec des pourcentages de forme ou des notes
-        player_rows = page.locator("#mainbrowse div[class*='css-g5y9jx'], #content div[class*='css-g5y9jx']").all()
-        print(f"Lignes de joueurs détectées : {len(player_rows)}")
+        # Liste exacte des onglets de postes visibles sur l'interface
+        postes = [
+            "GARDIEN", 
+            "LIBÉRO", 
+            "DÉFENSEUR", 
+            "MILIEU DÉFENSIF", 
+            "MILIEU OFFENSIF", 
+            "ATTAQUANT DE SOUTIEN", 
+            "ATTAQUANT"
+        ]
 
         seen_players = set()
 
-        for i in range(len(player_rows)):
+        for poste in postes:
+            print(f"Inspection de l'onglet : {poste}")
             try:
-                # Clic sur la ligne du joueur via JavaScript
+                # Clic sur l'onglet du poste correspondant via JavaScript pour éviter les interférences
                 page.evaluate(f"""
-                    const rows = document.querySelectorAll("#mainbrowse div[class*='css-g5y9jx'], #content div[class*='css-g5y9jx']");
-                    if (rows[{i}]) {{
-                        rows[{i}].click();
+                    const tabs = Array.from(document.querySelectorAll('div, span, a')).filter(el => el.textContent.trim().toUpperCase() === '{poste}');
+                    if (tabs.length > 0) {{
+                        tabs[0].click();
                     }}
                 """)
-                page.wait_for_timeout(1500)
-
-                # Extraction du texte de la ligne active
-                current_rows = page.locator("#mainbrowse div[class*='css-g5y9jx'], #content div[class*='css-g5y9jx']").all()
-                if i < len(current_rows):
-                    text = current_rows[i].inner_text().strip()
-                    if text:
-                        cols = [c.strip() for c in text.split("\n") if c.strip()]
-                        # On filtre pour ne garder que les lignes de joueurs valides (présence d'un nom et d'une stat/pourcentage)
-                        cols = [c for c in cols if len(c) < 40 and "POINTS" not in c and "CLUBS" not in c and "ONLINE" not in c]
-
-                        if len(cols) >= 3:
-                            player_name = cols[1] if len(cols) > 1 else cols[0]
-                            if player_name not in seen_players:
-                                seen_players.add(player_name)
-                                data.append(cols)
-
+                page.wait_for_timeout(3500) # Laisse le temps au contenu de charger
             except Exception as e:
-                print(f"Erreur sur la ligne {i+1}: {e}")
+                print(f"Impossible de cliquer sur l'onglet {poste}: {e}")
                 continue
 
-        print(f"Total de joueurs propres récupérés : {len(data)}")
+            # Récupération des lignes de joueurs pour ce poste précis
+            rows = page.locator("div[class*='css-g5y9jx']").all()
+            
+            count_joueurs = 0
+            for row in rows:
+                try:
+                    text = row.inner_text().strip()
+                    if text:
+                        lines = [l.strip() for l in text.split("\n") if l.strip()]
+                        
+                        # Filtrage rigoureux : on ne garde que les lignes contenant un pourcentage de forme/intégration 
+                        # et excluant les menus généraux
+                        if any("%" in l for l in lines) and len(lines) >= 2:
+                            player_name = lines[1] if len(lines) > 1 else lines[0]
+                            
+                            if player_name not in seen_players:
+                                seen_players.add(player_name)
+                                # On structure la ligne en y ajoutant le poste en premier élément
+                                player_info = [poste] + lines
+                                all_players_data.append(player_info)
+                                count_joueurs += 1
+                except Exception:
+                    continue
+                    
+            print(f"-> {count_joueurs} joueurs récupérés pour {poste}.")
+
+        print(f"Total cumulé des joueurs uniques : {len(all_players_data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
-        if WEBHOOK_URL and data:
-            print("Synchronisation vers la feuille 'Sélection'...")
+        if WEBHOOK_URL and all_players_data:
+            print("Synchronisation globale vers la feuille 'Sélection'...")
             try:
                 payload_dict = {
                     "sheetName": "Sélection",
-                    "data": data
+                    "data": all_players_data
                 }
                 payload = json.dumps(payload_dict).encode("utf-8")
                 
@@ -85,7 +102,7 @@ def run():
                     headers={"Content-Type": "application/json"}
                 )
                 with urllib.request.urlopen(req) as response:
-                    print("Synchronisation réussie !")
+                    print("Synchronisation de la feuille 'Sélection' réussie !")
             except Exception as e:
                 print(f"Erreur lors de la synchronisation : {e}")
         else:
