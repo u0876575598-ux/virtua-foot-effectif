@@ -22,15 +22,12 @@ def run():
         page.wait_for_url("**/#news*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page des joueurs
+        # Accès à la page des joueurs et attente que le réseau se stabilise
         print("Récupération de l'effectif...")
-        page.goto("https://www.virtuafoot.com/joueurs?view=niv")
-        
-        # Attente de la présence du contenu du tableau (on élargit au conteneur ou à n'importe quel tableau présent)
-        page.wait_for_load_selector = page.wait_for_selector("table, .tableau, div#content", timeout=15000)
+        page.goto("https://www.virtuafoot.com/joueurs?view=niv", wait_until="networkidle")
 
-        # Extraction des données du tableau principal de l'effectif
-        rows = page.locator("table tr").all()
+        # Extraction de toutes les lignes de tableaux présentes sur la page
+        rows = page.locator("tr").all()
         data = []
 
         for row in rows:
@@ -39,7 +36,7 @@ def run():
             if cleaned_cells:
                 data.append(cleaned_cells)
 
-        # Sauvegarde dans le CSV attendu par GitHub Actions
+        # Sauvegarde dans le fichier CSV attendu par le workflow GitHub Actions
         csv_filename = "virtuafoot_effectif.csv"
         with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
