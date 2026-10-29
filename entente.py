@@ -32,26 +32,23 @@ def run():
 
         data = []
         
-        # Sélection élargie pour capturer toutes les lignes de joueurs de la sélection
-        rows = page.locator("tr, div[class*='row'], div[class*='player'], div[class*='css-']").all()
+        # Ciblage strict des lignes de tableaux (tr) et de leurs cellules (td/th) pour structurer proprement les colonnes
+        rows = page.locator("table tr").all()
+        if not rows:
+            rows = page.locator("tr").all()
 
-        seen_rows = set()
         for row in rows:
-            text = row.inner_text().strip()
-            if text:
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                # On filtre pour garder les lignes qui contiennent plusieurs éléments de stats
-                if len(lines) >= 4:
-                    row_tuple = tuple(lines)
-                    if row_tuple not in seen_rows:
-                        seen_rows.add(row_tuple)
-                        data.append(lines)
+            cells = row.locator("td, th").all()
+            if cells:
+                row_data = [cell.inner_text().strip() for cell in cells]
+                # On ne garde que les lignes qui contiennent des données exploitables
+                if len(row_data) >= 2:
+                    data.append(row_data)
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and data:
             print("Synchronisation vers la feuille 'Sélection' de Google Sheets...")
             try:
-                # On encapsule les données avec le nom exact de la feuille cible
                 payload_dict = {
                     "sheetName": "Sélection",
                     "data": data
