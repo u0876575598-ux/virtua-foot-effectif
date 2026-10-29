@@ -26,6 +26,7 @@ jobs:
         env:
           VF_USERNAME: ${{ secrets.VF_USERNAME }}
           VF_PASSWORD: ${{ secrets.VF_PASSWORD }}
+          GOOGLE_WEBHOOK_URL: ${{ secrets.GOOGLE_WEBHOOK_URL }}
         run: python fetch_virtuafoot.py
 
       - name: Commit and push CSV update
