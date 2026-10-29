@@ -23,55 +23,73 @@ def run():
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page de l'entente
-        print("Accès à la page de l'entente...")
+        # Accès à la page de la sélection / entente
+        print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
-        
-        # Pause pour laisser le rendu React charger les données
-        page.wait_for_timeout(7000)
+        page.wait_for_timeout(5000)
 
-        data = []
+        all_players_data = []
         
-        # On cible chaque conteneur de ligne de joueur
-        rows = page.locator("div[class*='css-g5y9jx']").all()
+        # Liste des onglets de postes visibles sur l'interface
+        postes = [
+            "GARDIEN", 
+            "LIBÉRO", 
+            "DÉFENSEUR", 
+            "MILIEU DÉFENSIF", 
+            "MILIEU OFFENSIF", 
+            "ATTAQUANT DE SOUTIEN", 
+            "ATTAQUANT"
+        ]
 
-        seen_rows = set()
-        for row in rows:
-            # On cherche tous les sous-éléments ou cellules à l'intérieur de la ligne
-            cells = row.locator("div, span").all()
+        for poste in postes:
+            print(f"Inspection de l'onglet : {poste}")
+            try:
+                # Clic sur l'onglet du poste correspondant
+                tab = page.locator(f"text={poste}").first
+                if tab.is_visible():
+                    tab.click()
+                    page.wait_for_timeout(3000) # Laisse le temps au contenu de charger
+                else:
+                    continue
+            except Exception as e:
+                print(f"Impossible de cliquer sur l'onglet {poste}: {e}")
+                continue
+
+            # Récupération de tous les joueurs visibles dans cet onglet
+            rows = page.locator("div[class*='css-g5y9jx']").all()
             
-            row_data = []
-            for cell in cells:
-                # On évite d'attraper les conteneurs imbriqués globaux pour ne garder que les valeurs textuelles finales
-                sub_text = cell.inner_text().strip()
-                if sub_text and "\n" not in sub_text: # On prend les textes unitaires
-                    if sub_text not in row_data:
-                        row_data.append(sub_text)
-
-            # Si on a détecté plusieurs caractéristiques pour ce joueur
-            if len(row_data) >= 3:
-                row_tuple = tuple(row_data)
-                if row_tuple not in seen_rows:
-                    seen_rows.add(row_tuple)
-                    data.append(row_data)
-
-        # Si la méthode cellule par cellule est trop fine et ne renvoie rien, on bascule sur un découpage propre des lignes
-        if not data:
-            print("Méthode fine infructueuse, basculement sur le découpage structuré...")
-            for row in rows:
-                text = row.inner_text().strip()
-                if text:
-                    lines = [l.strip() for l in text.split("\n") if l.strip()]
-                    if 4 <= len(lines) <= 25:
-                        data.append(lines)
+            for i in range(len(rows)):
+                try:
+                    # On recrée la liste des lignes à chaque tour pour éviter les erreurs de rechargement DOM
+                    current_rows = page.locator("div[class*='css-g5y9jx']").all()
+                    if i >= len(current_rows):
+                        break
+                    
+                    row = current_rows[i]
+                    text = row.inner_text().strip()
+                    
+                    if text:
+                        # Si on souhaite cliquer sur le joueur pour ouvrir sa fiche / ses détails :
+                        # row.click()
+                        # page.wait_for_timeout(1000)
+                        
+                        lines = [l.strip() for l in text.split("\n") if l.strip()]
+                        if len(lines) >= 2:
+                            # On ajoute le poste en première info pour structurer
+                            player_info = [poste] + lines
+                            if player_info not in all_players_data:
+                                all_players_data.append(player_info)
+                except Exception as row_err:
+                    print(f"Erreur sur un joueur de l'onglet {poste}: {row_err}")
+                    continue
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
-        if WEBHOOK_URL and data:
-            print("Synchronisation vers la feuille 'Sélection' de Google Sheets...")
+        if WEBHOOK_URL and all_players_data:
+            print("Synchronisation globale vers la feuille 'Sélection'...")
             try:
                 payload_dict = {
                     "sheetName": "Sélection",
-                    "data": data
+                    "data": all_players_data
                 }
                 payload = json.dumps(payload_dict).encode("utf-8")
                 
