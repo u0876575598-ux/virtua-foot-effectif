@@ -22,36 +22,42 @@ def run():
         page.wait_for_url("**/#news*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page de l'effectif via le hash SPA
-        print("Récupération de l'effectif...")
-        page.goto("https://www.virtuafoot.com/#joueurs?view=niv")
-        
-        # On attend l'apparition effective d'une ligne de tableau contenant des données de joueurs (td)
+        print("Navigation vers l'effectif via le menu...")
+        # Simulation d'un clic réel sur le menu "Joueurs" pour déclencher le chargement AJAX
         try:
-            page.wait_for_selector("table tr td", timeout=15000)
+            page.locator("a:has-text('Joueurs'), a[href*='joueurs']").first.click()
         except Exception:
-            print("Délai d'attente dépassé pour le tableau, tentative de clic de secours...")
-            # Si le hash direct ne suffit pas, on simule un clic sur le menu Joueurs
-            try:
-                page.locator("a[href*='joueurs']").first.click()
-                page.wait_for_selector("table tr td", timeout=10000)
-            except Exception:
-                pass
+            # Fallback si le lien direct par texte échoue
+            page.goto("https://www.virtuafoot.com/#joueurs")
 
-        # Petite pause de sécurité pour s'assurer que toutes les lignes AJAX sont bien rendues
-        page.wait_for_timeout(3000)
+        # Pause pour laisser le temps au contenu AJAX de s'injecter dans la page
+        page.wait_for_timeout(5000)
 
-        # Extraction des lignes du tableau
-        rows = page.locator("tr").all()
+        # Recherche des tableaux présents sur la page
+        tables = page.locator("table").all()
+        print(f"Nombre de tableaux détectés : {len(tables)}")
+
         data = []
+        if tables:
+            # Extraction du premier tableau trouvé (l'effectif)
+            rows = tables[0].locator("tr").all()
+            for row in rows:
+                cells = row.locator("th, td").all_text_contents()
+                cleaned_cells = [cell.strip().replace("\n", " ") for cell in cells if cell.strip()]
+                if cleaned_cells:
+                    data.append(cleaned_cells)
 
-        for row in rows:
-            cells = row.locator("th, td").all_text_contents()
-            cleaned_cells = [cell.strip().replace("\n", " ") for cell in cells if cell.strip()]
-            if cleaned_cells:
-                data.append(cleaned_cells)
+        # Si le premier tableau est vide, on récupère toutes les lignes de la page
+        if not data:
+            print("Tentative de récupération globale des lignes...")
+            rows = page.locator("tr").all()
+            for row in rows:
+                cells = row.locator("th, td").all_text_contents()
+                cleaned_cells = [cell.strip().replace("\n", " ") for cell in cells if cell.strip()]
+                if cleaned_cells:
+                    data.append(cleaned_cells)
 
-        # Sauvegarde du fichier CSV
+        # Sauvegarde du fichier CSV pour GitHub Actions
         csv_filename = "virtuafoot_effectif.csv"
         with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -62,3 +68,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+    
