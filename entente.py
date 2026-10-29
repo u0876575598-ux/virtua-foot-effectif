@@ -30,46 +30,38 @@ def run():
 
         data = []
         
-        # On récupère tous les éléments cliquables représentant les joueurs dans la liste
-        # Sur Virtuafoot, chaque ligne de joueur permet un clic pour voir le profil/stats
+        # On récupère le nombre total de lignes de joueurs
         player_rows = page.locator("div[class*='css-g5y9jx']").all()
         print(f"Nombre de joueurs détectés dans la liste : {len(player_rows)}")
 
         for i in range(len(player_rows)):
             try:
-                # On recharge la liste à chaque tour pour éviter les erreurs de DOM obsolète
+                # Clic JavaScript direct sur l'élément i pour contourner les interférences de pointeur
+                page.evaluate(f"""
+                    const rows = document.querySelectorAll("div[class*='css-g5y9jx']");
+                    if (rows[{i}]) {{
+                        rows[{i}].click();
+                    }}
+                """)
+                
+                # Pause pour laisser le panneau/stats du joueur s'ouvrir ou se mettre à jour
+                page.wait_for_timeout(2000)
+
+                # Récupération du texte de la ligne active
                 current_rows = page.locator("div[class*='css-g5y9jx']").all()
-                if i >= len(current_rows):
-                    break
-                
-                row = current_rows[i]
-                
-                # Récupération du texte de base de la ligne avant le clic
-                base_text = row.inner_text().strip()
-                if not base_text:
-                    continue
+                if i < len(current_rows):
+                    active_text = current_rows[i].inner_text().strip()
+                    cols = [c.strip() for c in active_text.split("\n") if c.strip()]
+                    cols = [c for c in cols if len(c) < 50]
 
-                # CLIC sur le joueur pour charger ses stats détaillées
-                row.click()
-                # Pause pour laisser le panneau ou les stats du joueur s'actualiser à l'écran
-                page.wait_for_timeout(2500)
-
-                # Extraction des données textuelles de la ligne (ou de la zone active mise à jour)
-                # On capture les éléments visibles de la ligne active
-                active_text = row.inner_text().strip()
-                cols = [c.strip() for c in active_text.split("\n") if c.strip()]
-                
-                # Nettoyage pour garder un format de ligne propre
-                cols = [c for c in cols if len(c) < 50]
-
-                if cols and cols not in data:
-                    data.append(cols)
+                    if cols and cols not in data:
+                        data.append(cols)
 
             except Exception as e:
-                print(f"Erreur lors du clic sur le joueur {i+1}: {e}")
+                print(f"Erreur lors du traitement du joueur {i+1}: {e}")
                 continue
 
-        print(f"Total de lignes de joueurs récupérées avec clics : {len(data)}")
+        print(f"Total de lignes de joueurs récupérées : {len(data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and data:
