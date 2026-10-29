@@ -23,79 +23,44 @@ def run():
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page de la sélection / entente
+        # Accès direct à la page de sélection de l'entente
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
         
-        # Pause plus longue pour garantir le rendu complet de l'interface React
+        # Pause pour laisser le rendu React charger tous les éléments de la page
         page.wait_for_timeout(8000)
 
-        all_players_data = []
-        
-        # Mots-clés des onglets de postes
-        postes = [
-            "GARDIEN", 
-            "LIBÉRO", 
-            "DÉFENSEUR", 
-            "MILIEU DÉFENSIF", 
-            "MILIEU OFFENSIF", 
-            "ATTAQUANT DE SOUTIEN", 
-            "ATTAQUANT"
-        ]
+        data = []
+        seen_players = set()
 
-        for poste in postes:
-            print(f"Inspection de l'onglet : {poste}")
-            try:
-                # Recherche multi-sélecteurs pour cliquer sur l'onglet
-                # 1. Par texte exact ou insensible à la casse
-                # 2. Par élément cliquable contenant le texte
-                tab_locator = page.locator(f"xpath=//*[contains(translate(text(), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), '{poste}')]").first
+        # On cible les lignes de blocs de joueurs de manière stricte
+        rows = page.locator("div[class*='css-g5y9jx']").all()
 
-                if tab_locator.is_visible():
-                    tab_locator.click()
-                    page.wait_for_timeout(3000)
-                else:
-                    # Essai de clic forcé en JavaScript si le ciblage standard échoue
-                    page.evaluate(f"""
-                        const el = Array.from(document.querySelectorAll('*')).find(e => e.textContent.trim().toUpperCase() === '{poste}');
-                        if (el) el.click();
-                    """)
-                    page.wait_for_timeout(3000)
-
-            except Exception as e:
-                print(f"Erreur lors du clic sur l'onglet {poste}: {e}")
-
-            # Récupération des lignes de joueurs affichées sous cet onglet
-            rows = page.locator("div[class*='css-g5y9jx']").all()
-            if not rows:
-                rows = page.locator("div[class*='row'], tr").all()
-
-            count_joueurs = 0
-            for row in rows:
-                try:
-                    text = row.inner_text().strip()
-                    if text:
-                        lines = [l.strip() for l in text.split("\n") if l.strip()]
-                        # On vérifie que la ligne contient bien des données de joueurs
-                        if len(lines) >= 3 and poste not in lines[0]:
-                            player_info = [poste] + lines
-                            if player_info not in all_players_data:
-                                all_players_data.append(player_info)
-                                count_joueurs += 1
-                except Exception:
-                    continue
+        for row in rows:
+            text = row.inner_text().strip()
+            if text:
+                # On découpe chaque ligne par saut de ligne pour obtenir les cellules individuelles
+                cols = [c.strip() for c in text.split("\n") if c.strip()]
+                
+                # Filtrage rigoureux : on ne garde que les lignes qui correspondent à un vrai joueur 
+                # (doit contenir un pourcentage de forme/intégration et un nom, soit au moins 4 à 15 éléments)
+                if 4 <= len(cols) <= 20:
+                    # Utilisation du nom du joueur (souvent en 2ème ou 3ème position) pour éviter les doublons
+                    player_identifier = cols[1] if len(cols) > 1 else cols[0]
                     
-            print(f"-> {count_joueurs} joueurs récupérés pour {poste}.")
+                    if player_identifier not in seen_players and "GOALKEEPER" not in player_identifier and "DEFENDER" not in player_identifier:
+                        seen_players.add(player_identifier)
+                        data.append(cols)
 
-        print(f"Total cumulé des lignes trouvées : {len(all_players_data)}")
+        print(f"Nombre de joueurs uniques extraits : {len(data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
-        if WEBHOOK_URL and all_players_data:
-            print("Synchronisation globale vers la feuille 'Sélection'...")
+        if WEBHOOK_URL and data:
+            print("Synchronisation propre vers la feuille 'Sélection'...")
             try:
                 payload_dict = {
                     "sheetName": "Sélection",
-                    "data": all_players_data
+                    "data": data
                 }
                 payload = json.dumps(payload_dict).encode("utf-8")
                 
@@ -105,7 +70,7 @@ def run():
                     headers={"Content-Type": "application/json"}
                 )
                 with urllib.request.urlopen(req) as response:
-                    print("Synchronisation de la feuille 'Sélection' réussie !")
+                    print("Synchronisation réussie !")
             except Exception as e:
                 print(f"Erreur lors de la synchronisation : {e}")
         else:
