@@ -27,32 +27,33 @@ def run():
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
         
-        # Pause pour laisser le rendu React charger tous les éléments de la page
+        # Pause pour laisser le rendu React charger tous les éléments
         page.wait_for_timeout(8000)
 
         data = []
         seen_players = set()
 
-        # On cible les lignes de blocs de joueurs de manière stricte
+        # Ciblage précis des lignes individuelles de la liste
         rows = page.locator("div[class*='css-g5y9jx']").all()
 
         for row in rows:
             text = row.inner_text().strip()
             if text:
-                # On découpe chaque ligne par saut de ligne pour obtenir les cellules individuelles
-                cols = [c.strip() for c in text.split("\n") if c.strip()]
+                # Découpage par ligne pour récupérer les cellules unitaires
+                raw_cols = [c.strip() for c in text.split("\n") if c.strip()]
                 
-                # Filtrage rigoureux : on ne garde que les lignes qui correspondent à un vrai joueur 
-                # (doit contenir un pourcentage de forme/intégration et un nom, soit au moins 4 à 15 éléments)
-                if 4 <= len(cols) <= 20:
-                    # Utilisation du nom du joueur (souvent en 2ème ou 3ème position) pour éviter les doublons
-                    player_identifier = cols[1] if len(cols) > 1 else cols[0]
+                # On nettoie et on ne garde que les éléments pertinents (on évite les blocs géants)
+                cols = [c for c in raw_cols if len(c) < 50 and "GOALKEEPER" not in c and "DEFENDER" not in c and "ATTACKING" not in c]
+                
+                # Un joueur valide a un certain nombre de colonnes de stats (ex: Poste, Nom, Pourcentage, Note, etc.)
+                if 3 <= len(cols) <= 12:
+                    player_name = cols[1] if len(cols) > 1 else cols[0]
                     
-                    if player_identifier not in seen_players and "GOALKEEPER" not in player_identifier and "DEFENDER" not in player_identifier:
-                        seen_players.add(player_identifier)
+                    if player_name not in seen_players:
+                        seen_players.add(player_name)
                         data.append(cols)
 
-        print(f"Nombre de joueurs uniques extraits : {len(data)}")
+        print(f"Nombre de joueurs uniques extraits proprement : {len(data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and data:
