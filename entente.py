@@ -44,7 +44,7 @@ def run():
         for poste in postes:
             print(f"Inspection de l'onglet : {poste}")
             try:
-                # Clic sur l'onglet du poste
+                # Clic propre sur l'onglet du poste
                 page.evaluate(f"""
                     const tabs = Array.from(document.querySelectorAll('div, span, a')).filter(el => el.textContent.trim().toUpperCase() === '{poste}');
                     if (tabs.length > 0) {{ tabs[0].click(); }}
@@ -54,30 +54,32 @@ def run():
                 print(f"Erreur onglet {poste}: {e}")
                 continue
 
+            # On récupère directement les lignes du tableau de joueurs de manière ciblée
             rows = page.locator("div[class*='css-g5y9jx']").all()
             
             for row in rows:
                 try:
                     text = row.inner_text().strip()
                     if text:
-                        # On nettoie et on fusionne les sauts de lignes parasites pour ne garder que le texte utile
-                        lines = [l.strip() for l in text.split("\n") if l.strip() and l != "O"]
+                        lines = [l.strip() for l in text.split("\n") if l.strip()]
                         
-                        # On cherche une ligne qui ressemble à un joueur (présence d'un pourcentage)
-                        if any("%" in l for l in lines) and len(lines) >= 2:
-                            # Extraction du nom du joueur (généralement le premier élément textuel non numérique)
-                            valid_items = [l for l in lines if not l.endswith("°") and l not in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT"]]
+                        # On filtre pour ne garder que les lignes de joueurs valides (doit contenir un '%')
+                        if any("%" in l for l in lines):
+                            # Nettoyage des éléments superflus
+                            filtered = [l for l in lines if l not in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT", "O"] and not l.endswith("°")]
                             
-                            if len(valid_items) >= 2:
-                                player_name = valid_items[0] if not "%" in valid_items[0] else valid_items[1]
+                            if len(filtered) >= 2:
+                                # Le nom du joueur est le premier élément texte valide
+                                player_name = filtered[0] if not "%" in filtered[0] else (filtered[1] if len(filtered) > 1 else "")
                                 
-                                if player_name not in seen_players and len(player_name) > 2 and "LA 7EME" not in player_name and "GOALKEEPER" not in player_name:
+                                # Extraction du pourcentage et de la note
+                                percentage = next((l for l in lines if "%" in l), "")
+                                note = next((l for l in lines if l.replace('.', '').isdigit() and float(l.replace(',', '.')) < 100), "")
+                                
+                                if player_name and player_name not in seen_players and len(player_name) > 2 and "LA 7EME" not in player_name:
                                     seen_players.add(player_name)
                                     
-                                    # On isole proprement : [Poste, Nom, Pourcentage, Note]
-                                    percentage = next((l for l in lines if "%" in l), "")
-                                    note = next((l for l in lines if l.replace('.', '').isdigit() and float(l.replace(',', '.')) < 100), "")
-                                    
+                                    # Format strict sur 4 colonnes max
                                     player_info = [poste, player_name, percentage, note]
                                     all_players_data.append(player_info)
                 except Exception:
