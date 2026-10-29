@@ -26,7 +26,7 @@ def run():
         # Accès à la page de la sélection / entente
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
-        page.wait_for_timeout(5000)
+        page.wait_for_timeout(6000)
 
         all_players_data = []
         
@@ -48,40 +48,35 @@ def run():
                 tab = page.locator(f"text={poste}").first
                 if tab.is_visible():
                     tab.click()
-                    page.wait_for_timeout(3000) # Laisse le temps au contenu de charger
+                    # Pause pour laisser le rendu React charger les joueurs de ce poste
+                    page.wait_for_timeout(4000)
                 else:
+                    print(f"Onglet {poste} non visible.")
                     continue
             except Exception as e:
                 print(f"Impossible de cliquer sur l'onglet {poste}: {e}")
                 continue
 
-            # Récupération de tous les joueurs visibles dans cet onglet
-            rows = page.locator("div[class*='css-g5y9jx']").all()
+            # Recherche des lignes de joueurs avec plusieurs sélecteurs possibles pour être infaillible
+            rows = page.locator("div[class*='css-g5y9jx'], tr, div[class*='player']").all()
             
-            for i in range(len(rows)):
+            count_joueurs = 0
+            for row in rows:
                 try:
-                    # On recrée la liste des lignes à chaque tour pour éviter les erreurs de rechargement DOM
-                    current_rows = page.locator("div[class*='css-g5y9jx']").all()
-                    if i >= len(current_rows):
-                        break
-                    
-                    row = current_rows[i]
                     text = row.inner_text().strip()
-                    
                     if text:
-                        # Si on souhaite cliquer sur le joueur pour ouvrir sa fiche / ses détails :
-                        # row.click()
-                        # page.wait_for_timeout(1000)
-                        
                         lines = [l.strip() for l in text.split("\n") if l.strip()]
-                        if len(lines) >= 2:
-                            # On ajoute le poste en première info pour structurer
+                        # On filtre pour ne garder que les lignes qui ressemblent à une fiche joueur (plusieurs stats/infos)
+                        if len(lines) >= 3:
                             player_info = [poste] + lines
                             if player_info not in all_players_data:
                                 all_players_data.append(player_info)
-                except Exception as row_err:
-                    print(f"Erreur sur un joueur de l'onglet {poste}: {row_err}")
+                                count_joueurs += 1
+                except Exception:
                     continue
+            print(f"-> {count_joueurs} lignes récupérées pour {poste}.")
+
+        print(f"Total cumulé des lignes trouvées : {len(all_players_data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and all_players_data:
