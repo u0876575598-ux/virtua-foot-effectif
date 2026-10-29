@@ -23,7 +23,7 @@ def run():
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page de sélection de l'entente
+        # Accès à la page de l'entente
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
         page.wait_for_timeout(8000)
@@ -42,50 +42,73 @@ def run():
         seen_players = set()
 
         for poste in postes:
-            print(f"Inspection de l'onglet : {poste}")
+            print(f"--- Inspection de l'onglet : {poste} ---")
             try:
-                # Clic propre sur l'onglet du poste
+                # Clic sur l'onglet du poste
                 page.evaluate(f"""
                     const tabs = Array.from(document.querySelectorAll('div, span, a')).filter(el => el.textContent.trim().toUpperCase() === '{poste}');
                     if (tabs.length > 0) {{ tabs[0].click(); }}
                 """)
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(3500)
             except Exception as e:
                 print(f"Erreur onglet {poste}: {e}")
                 continue
 
-            # On récupère directement les lignes du tableau de joueurs de manière ciblée
-            rows = page.locator("div[class*='css-g5y9jx']").all()
+            # On récupère le nombre de joueurs dans la liste pour ce poste
+            row_count = page.evaluate("""
+                () => document.querySelectorAll("div[class*='css-g5y9jx']").length
+            """)
             
-            for row in rows:
+            print(f"{row_count} lignes trouvées pour {poste}.")
+
+            for i in range(row_count):
                 try:
-                    text = row.inner_text().strip()
-                    if text:
-                        lines = [l.strip() for l in text.split("\n") if l.strip()]
+                    # Clic chirurgical par index sur chaque ligne de joueur pour ouvrir/charger ses stats
+                    page.evaluate(f"""
+                        () => {{
+                            const rows = document.querySelectorAll("div[class*='css-g5y9jx']");
+                            if (rows[{i}]) {{
+                                rows[{i}].click();
+                            }}
+                        }}
+                    """)
+                    # Petite pause pour laisser l'interface React réagir au clic du joueur
+                    page.wait_for_timeout(1500)
+
+                    # Récupération du texte de la ligne active après le clic
+                    row_data = page.evaluate(f"""
+                        () => {{
+                            const rows = document.querySelectorAll("div[class*='css-g5y9jx']");
+                            if (rows[{i}]) {{
+                                return rows[{i}].innerText.trim();
+                            }}
+                            return "";
+                        }}
+                    """)
+
+                    if row_data:
+                        lines = [l.strip() for l in row_data.split("\n") if l.strip()]
                         
-                        # On filtre pour ne garder que les lignes de joueurs valides (doit contenir un '%')
+                        # Filtrage pour valider que c'est bien une ligne de joueur (contient un '%')
                         if any("%" in l for l in lines):
-                            # Nettoyage des éléments superflus
                             filtered = [l for l in lines if l not in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT", "O"] and not l.endswith("°")]
                             
                             if len(filtered) >= 2:
-                                # Le nom du joueur est le premier élément texte valide
                                 player_name = filtered[0] if not "%" in filtered[0] else (filtered[1] if len(filtered) > 1 else "")
-                                
-                                # Extraction du pourcentage et de la note
                                 percentage = next((l for l in lines if "%" in l), "")
                                 note = next((l for l in lines if l.replace('.', '').isdigit() and float(l.replace(',', '.')) < 100), "")
                                 
-                                if player_name and player_name not in seen_players and len(player_name) > 2 and "LA 7EME" not in player_name:
+                                if player_name and player_name not in seen_players and len(player_name) > 2 and "GOALKEEPER" not in player_name:
                                     seen_players.add(player_name)
                                     
-                                    # Format strict sur 4 colonnes max
+                                    # Ligne propre : [Poste, Nom, Pourcentage, Note]
                                     player_info = [poste, player_name, percentage, note]
                                     all_players_data.append(player_info)
-                except Exception:
+                except Exception as e:
+                    print(f"Erreur sur la ligne {i}: {e}")
                     continue
 
-        print(f"Total de joueurs uniques propres : {len(all_players_data)}")
+        print(f"Total cumulé de joueurs récupérés avec clics : {len(all_players_data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and all_players_data:
