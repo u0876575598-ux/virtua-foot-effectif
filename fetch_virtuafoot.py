@@ -22,17 +22,21 @@ def run():
         page.wait_for_url("**/#news*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page des joueurs
+        # Accès à la page des joueurs via la navigation SPA interne
         print("Récupération de l'effectif...")
-        page.goto("https://www.virtuafoot.com/joueurs?view=niv")
         
-        # On attend cette fois que les lignes du tableau des joueurs soient présentes dans le DOM
-        try:
-            page.wait_for_selector("table tr td", timeout=15000)
-        except Exception:
-            print("Attention : Délai dépassé pour le tableau, tentative de lecture quand même...")
+        # Navigation vers l'ancrage interne
+        page.goto("https://www.virtuafoot.com/#joueurs?view=niv")
+        
+        # Attente active du chargement du contenu dans le DOM
+        page.wait_for_timeout(4000) # Pause de 4s pour laisser le script AJAX remplir le tableau
+        
+        # Si la table n'apparaît pas, on essaie de forcer le clic sur le lien 'Joueurs' du menu
+        if page.locator("tr").count() < 2:
+            page.locator("a[href*='joueurs']").first.click()
+            page.wait_for_timeout(3000)
 
-        # Extraction des lignes
+        # Récupération de toutes les lignes du tableau
         rows = page.locator("tr").all()
         data = []
 
@@ -42,7 +46,7 @@ def run():
             if cleaned_cells:
                 data.append(cleaned_cells)
 
-        # Sauvegarde dans le fichier CSV
+        # Sauvegarde dans le CSV
         csv_filename = "virtuafoot_effectif.csv"
         with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
