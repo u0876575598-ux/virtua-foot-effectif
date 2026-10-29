@@ -23,7 +23,7 @@ def run():
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page de l'entente
+        # Accès à la page de sélection de l'entente
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
         page.wait_for_timeout(8000)
@@ -60,21 +60,25 @@ def run():
                 try:
                     text = row.inner_text().strip()
                     if text:
-                        lines = [l.strip() for l in text.split("\n") if l.strip()]
+                        # On nettoie et on fusionne les sauts de lignes parasites pour ne garder que le texte utile
+                        lines = [l.strip() for l in text.split("\n") if l.strip() and l != "O"]
                         
-                        # On ne garde que les lignes qui contiennent un pourcentage (signature d'un joueur)
+                        # On cherche une ligne qui ressemble à un joueur (présence d'un pourcentage)
                         if any("%" in l for l in lines) and len(lines) >= 2:
-                            # Extraction propre : on filtre les bruits et on garde les vraies valeurs utiles
-                            clean_lines = [l for l in lines if l not in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT", "O", ""] and not l.endswith("°")]
+                            # Extraction du nom du joueur (généralement le premier élément textuel non numérique)
+                            valid_items = [l for l in lines if not l.endswith("°") and l not in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT"]]
                             
-                            if clean_lines:
-                                player_name = clean_lines[0] if not any(c.endswith("%") for c in clean_lines[0]) else clean_lines[1] if len(clean_lines) > 1 else "Inconnu"
+                            if len(valid_items) >= 2:
+                                player_name = valid_items[0] if not "%" in valid_items[0] else valid_items[1]
                                 
-                                if player_name not in seen_players and len(player_name) > 2 and "LA 7EME" not in player_name:
+                                if player_name not in seen_players and len(player_name) > 2 and "LA 7EME" not in player_name and "GOALKEEPER" not in player_name:
                                     seen_players.add(player_name)
                                     
-                                    # Construction d'une ligne propre : [Poste, Nom, et toutes les stats détectées]
-                                    player_info = [poste] + clean_lines
+                                    # On isole proprement : [Poste, Nom, Pourcentage, Note]
+                                    percentage = next((l for l in lines if "%" in l), "")
+                                    note = next((l for l in lines if l.replace('.', '').isdigit() and float(l.replace(',', '.')) < 100), "")
+                                    
+                                    player_info = [poste, player_name, percentage, note]
                                     all_players_data.append(player_info)
                 except Exception:
                     continue
