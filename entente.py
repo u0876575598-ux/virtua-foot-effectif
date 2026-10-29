@@ -23,7 +23,7 @@ def run():
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page de sélection de l'entente
+        # Accès à la page de l'entente
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
         page.wait_for_timeout(8000)
@@ -54,21 +54,21 @@ def run():
                 print(f"Erreur onglet {poste}: {e}")
                 continue
 
-            # On récupère uniquement les lignes qui se trouvent dans la liste des joueurs de l'entente 
-            # (en évitant les widgets du stade, le VF Index, etc.)
+            # On extrait proprement les lignes en ciblant uniquement le tableau central des joueurs
             rows_data = page.evaluate("""
                 () => {
-                    // On cherche les lignes qui ressemblent à un joueur (présence d'un nom et d'une stat de forme)
                     const elements = Array.from(document.querySelectorAll("div[class*='css-g5y9jx']"));
-                    return elements
-                        .map(el => el.innerText.trim())
-                        .filter(text => {
-                            // Filtre strict pour exclure les menus du stade et les bruits de l'interface
-                            if (!text.includes("%")) return false;
-                            if (text.includes("STADIUM") || text.includes("VF Index") || text.includes("Seat distribution") || text.includes("Bridgestone")) return false;
-                            if (text.length > 150) return false;
-                            return true;
-                        });
+                    let results = [];
+                    elements.forEach(el => {
+                        const text = el.innerText.trim();
+                        // On cherche les blocs qui contiennent un nom de joueur et des stats sur plusieurs lignes
+                        if (text && text.includes("%") && text.split("\\n").length >= 3) {
+                            if (!text.includes("STADIUM") && !text.includes("VF Index") && !text.includes("Seat distribution")) {
+                                results.push(text);
+                            }
+                        }
+                    });
+                    return results;
                 }
             """)
 
@@ -78,23 +78,30 @@ def run():
                 try:
                     lines = [l.strip() for l in row_text.split("\n") if l.strip()]
                     
-                    if any("%" in l for l in lines):
-                        filtered = [l for l in lines if l not in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT", "O"] and not l.endswith("°")]
-                        
-                        if len(filtered) >= 2:
-                            player_name = filtered[0] if not "%" in filtered[0] else filtered[1]
-                            percentage = next((l for l in lines if "%" in l), "")
-                            note = next((l for l in lines if l.replace('.', '').isdigit() and float(l.replace(',', '.')) < 100), "")
-                            
-                            if player_name and player_name not in seen_players and len(player_name) > 2 and "GOALKEEPER" not in player_name:
-                                seen_players.add(player_name)
-                                
-                                player_info = [poste, player_name, percentage, note]
-                                all_players_data.append(player_info)
+                    # Extraction chirurgicale : on cherche le nom, le pourcentage et la note parmi les lignes du bloc
+                    player_name = ""
+                    percentage = ""
+                    note = ""
+                    
+                    for line in lines:
+                        if "%" in line:
+                            percentage = line
+                        elif any(char.isdigit() for char in line) and len(line) <= 5 and not "%" in line:
+                            # La note est généralement un nombre court (ex: 93, 90, etc.)
+                            if float(line.replace(',', '.')) < 100:
+                                note = line
+                        elif len(line) > 2 and not line in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT", "O"] and not line.endswith("°"):
+                            if not player_name and "LA 7EME" not in line and "GOALKEEPER" not in line:
+                                player_name = line
+
+                    if player_name and percentage and player_name not in seen_players:
+                        seen_players.add(player_name)
+                        player_info = [poste, player_name, percentage, note]
+                        all_players_data.append(player_info)
                 except Exception:
                     continue
 
-        print(f"Total cumulé de joueurs récupérés : {len(all_players_data)}")
+        print(f"Total cumulé de joueurs propres récupérés : {len(all_players_data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and all_players_data:
