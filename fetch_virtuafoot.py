@@ -21,8 +21,8 @@ def run():
         page.fill("form#login input[type='password'], form#login input[name='pass'], input[name='pass']", PASSWORD)
         page.locator("form#login button[type='submit'], form#login input[type='submit'], button:has-text('Connexion')").first.click()
 
-        # Attente de la connexion
-        page.wait_for_url("**/#news*", timeout=15000)
+        # Attente souple de la redirection post-connexion (quel que soit le hash #news, #home, etc.)
+        page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
         # Accès à la page de l'effectif
