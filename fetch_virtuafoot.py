@@ -21,7 +21,7 @@ def run():
         page.fill("form#login input[type='password'], form#login input[name='pass'], input[name='pass']", PASSWORD)
         page.locator("form#login button[type='submit'], form#login input[type='submit'], button:has-text('Connexion')").first.click()
 
-        # Attente souple de la redirection post-connexion (quel que soit le hash #news, #home, etc.)
+        # Attente souple de la redirection post-connexion
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
@@ -29,23 +29,36 @@ def run():
         print("Accès à la page de l'effectif...")
         page.goto("https://www.virtuafoot.com/#joueurs?view=niv")
         
-        # Pause pour laisser le rendu React/JavaScript s'exécuter complètement
+        # Pause pour laisser le rendu React s'exécuter complètement
         page.wait_for_timeout(7000)
 
         data = []
         
-        # Récupération des blocs de lignes basés sur la structure React de l'interface
-        rows = page.locator("div[class*='css-g5y9jx']").all()
+        # Ciblage plus précis : on cherche les lignes conteneurs principales de l'effectif 
+        # en filtrant sur les divs qui contiennent une structure de joueur
+        rows = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
         
+        if not rows:
+            # Sélecteur élargi de secours si le style spécifique change
+            rows = page.locator("div[class*='css-g5y9jx']").all()
+
+        seen_rows = set()
         for row in rows:
             text = row.inner_text().strip()
             if text:
+                # Nettoyage et découpage des informations de la ligne
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if len(lines) >= 2 and lines not in data:
-                    data.append(lines)
+                
+                # On ne garde que les blocs qui ont une taille cohérente pour une ligne de joueur 
+                # (évite de capturer les micro-éléments ou les en-têtes dupliqués)
+                if 5 <= len(lines) <= 25:
+                    row_tuple = tuple(lines)
+                    if row_tuple not in seen_rows:
+                        seen_rows.add(row_tuple)
+                        data.append(lines)
 
-        # Méthode de secours textuelle si les blocs sont insuffisants
-        if len(data) < 2:
+        # Si l'extraction par blocs ne donne rien, on bascule sur une analyse textuelle propre
+        if not data:
             print("Utilisation de la méthode de secours textuelle...")
             content_text = page.locator("#content, #divbody").inner_text()
             for line in content_text.split("\n"):
@@ -53,7 +66,7 @@ def run():
                 if cleaned:
                     data.append([cleaned])
 
-        # Sauvegarde locale du fichier CSV (utilisé par Git/GitHub Actions)
+        # Sauvegarde locale du fichier CSV
         csv_filename = "virtuafoot_effectif.csv"
         with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -61,7 +74,7 @@ def run():
 
         print(f"Fichier {csv_filename} généré avec succès ({len(data)} lignes enregistrées) !")
 
-        # Synchronisation automatique vers Google Sheets via Webhook (si configuré)
+        # Synchronisation automatique vers Google Sheets via Webhook
         if WEBHOOK_URL:
             print("Synchronisation avec Google Sheets...")
             try:
