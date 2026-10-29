@@ -2,8 +2,8 @@ name: Virtuafoot Scraper
 
 on:
   schedule:
-    - cron: '0 6 * * *' # S'exécute chaque jour à 6h00 UTC
-  workflow_dispatch: # Permet de le lancer manuellement
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 jobs:
   run-scraper:
