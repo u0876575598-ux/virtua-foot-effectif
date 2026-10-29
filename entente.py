@@ -44,7 +44,7 @@ def run():
         for poste in postes:
             print(f"--- Inspection de l'onglet : {poste} ---")
             try:
-                # Clic propre sur l'onglet du poste
+                # Clic sur l'onglet du poste
                 page.evaluate(f"""
                     const tabs = Array.from(document.querySelectorAll('div, span, a')).filter(el => el.textContent.trim().toUpperCase() === '{poste}');
                     if (tabs.length > 0) {{ tabs[0].click(); }}
@@ -54,54 +54,64 @@ def run():
                 print(f"Erreur onglet {poste}: {e}")
                 continue
 
-            # On extrait proprement les lignes en ciblant uniquement le tableau central des joueurs
-            rows_data = page.evaluate("""
+            # On récupère le nombre de lignes de joueurs cliquables pour ce poste
+            player_elements_count = page.evaluate("""
                 () => {
                     const elements = Array.from(document.querySelectorAll("div[class*='css-g5y9jx']"));
-                    let results = [];
-                    elements.forEach(el => {
-                        const text = el.innerText.trim();
-                        // On cherche les blocs qui contiennent un nom de joueur et des stats sur plusieurs lignes
-                        if (text && text.includes("%") && text.split("\\n").length >= 3) {
-                            if (!text.includes("STADIUM") && !text.includes("VF Index") && !text.includes("Seat distribution")) {
-                                results.push(text);
-                            }
-                        }
-                    });
-                    return results;
+                    // On filtre pour ne garder que les lignes qui contiennent un bouton radio ou un pourcentage
+                    return elements.filter(el => el.querySelector("input[type='radio']") || el.innerText.includes("%")).length;
                 }
             """)
 
-            print(f"Joueurs valides trouvés pour {poste} : {len(rows_data)}")
+            print(f"Nombre de joueurs cliquables trouvés pour {poste} : {player_elements_count}")
 
-            for row_text in rows_data:
+            for i in range(player_elements_count):
                 try:
-                    lines = [l.strip() for l in row_text.split("\n") if l.strip()]
-                    
-                    # Extraction chirurgicale : on cherche le nom, le pourcentage et la note parmi les lignes du bloc
-                    player_name = ""
-                    percentage = ""
-                    note = ""
-                    
-                    for line in lines:
-                        if "%" in line:
-                            percentage = line
-                        elif any(char.isdigit() for char in line) and len(line) <= 5 and not "%" in line:
-                            # La note est généralement un nombre court (ex: 93, 90, etc.)
-                            if float(line.replace(',', '.')) < 100:
-                                note = line
-                        elif len(line) > 2 and not line in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT", "O"] and not line.endswith("°"):
-                            if not player_name and "LA 7EME" not in line and "GOALKEEPER" not in line:
-                                player_name = line
+                    # On réalise un clic direct via le DOM sur chaque joueur de la liste
+                    row_data = page.evaluate(f"""
+                        () => {{
+                            const elements = Array.from(document.querySelectorAll("div[class*='css-g5y9jx']"));
+                            const playerRows = elements.filter(el => el.querySelector("input[type='radio']") || el.innerText.includes("%"));
+                            if (playerRows[{i}]) {{
+                                playerRows[{i}].click();
+                                return playerRows[{i}].innerText.trim();
+                            }}
+                            return "";
+                        }}
+                    """)
 
-                    if player_name and percentage and player_name not in seen_players:
-                        seen_players.add(player_name)
-                        player_info = [poste, player_name, percentage, note]
-                        all_players_data.append(player_info)
+                    # Petite pause pour laisser React charger les caractéristiques après le clic
+                    page.wait_for_timeout(1000)
+
+                    if row_data:
+                        lines = [l.strip() for l in row_data.split("\n") if l.strip()]
+                        
+                        player_name = ""
+                        percentage = ""
+                        note = ""
+                        
+                        for line in lines:
+                            if "%" in line and not percentage:
+                                percentage = line
+                            elif any(char.isdigit() for char in line) and len(line) <= 5 and not "%" in line:
+                                try:
+                                    val = float(line.replace(',', '.'))
+                                    if val < 100 and not note:
+                                        note = line
+                                except ValueError:
+                                    pass
+                            elif len(line) > 2 and line not in ["GC", "LI", "DEF", "MD", "MO", "AS", "AT", "O", "SWEEPER", "GOALKEEPER"] and not line.endswith("°"):
+                                if not player_name and "LA 7EME" not in line and "COMPAGNIE" not in line:
+                                    player_name = line
+
+                        if player_name and percentage and player_name not in seen_players:
+                            seen_players.add(player_name)
+                            player_info = [poste, player_name, percentage, note]
+                            all_players_data.append(player_info)
                 except Exception:
                     continue
 
-        print(f"Total cumulé de joueurs propres récupérés : {len(all_players_data)}")
+        print(f"Total cumulé de joueurs récupérés avec clics : {len(all_players_data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and all_players_data:
