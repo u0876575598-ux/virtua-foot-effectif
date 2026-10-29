@@ -1,9 +1,12 @@
 import os
 import csv
+import json
+import urllib.request
 from playwright.sync_api import sync_playwright
 
 USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
+WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
 def run():
     with sync_playwright() as p:
@@ -31,19 +34,17 @@ def run():
 
         data = []
         
-        # Récupération des blocs de lignes basés sur la structure React vue dans l'inspecteur
+        # Récupération des blocs de lignes basés sur la structure React de l'interface
         rows = page.locator("div[class*='css-g5y9jx']").all()
         
         for row in rows:
             text = row.inner_text().strip()
             if text:
-                # Découpage des lignes internes du bloc
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
-                # On filtre pour retenir les blocs structurés (contenant plusieurs informations de joueurs)
                 if len(lines) >= 2 and lines not in data:
                     data.append(lines)
 
-        # Si l'extraction par blocs est insuffisante, on récupère le texte global de la zone de contenu
+        # Méthode de secours textuelle si les blocs sont insuffisants
         if len(data) < 2:
             print("Utilisation de la méthode de secours textuelle...")
             content_text = page.locator("#content, #divbody").inner_text()
@@ -52,13 +53,31 @@ def run():
                 if cleaned:
                     data.append([cleaned])
 
-        # Sauvegarde du fichier CSV
+        # Sauvegarde locale du fichier CSV (utilisé par Git/GitHub Actions)
         csv_filename = "virtuafoot_effectif.csv"
         with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerows(data)
 
         print(f"Fichier {csv_filename} généré avec succès ({len(data)} lignes enregistrées) !")
+
+        # Synchronisation automatique vers Google Sheets via Webhook (si configuré)
+        if WEBHOOK_URL:
+            print("Synchronisation avec Google Sheets...")
+            try:
+                payload = json.dumps(data).encode("utf-8")
+                req = urllib.request.Request(
+                    WEBHOOK_URL,
+                    data=payload,
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req) as response:
+                    print("Synchronisation Google Sheets réussie !")
+            except Exception as e:
+                print(f"Erreur lors de la synchronisation Google Sheets : {e}")
+        else:
+            print("Aucun secret GOOGLE_WEBHOOK_URL détecté, synchronisation Google Sheets ignorée.")
+
         browser.close()
 
 if __name__ == "__main__":
