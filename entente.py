@@ -32,18 +32,21 @@ def run():
 
         data = []
         
-        # Ciblage strict des lignes de tableaux (tr) et de leurs cellules (td/th) pour structurer proprement les colonnes
-        rows = page.locator("table tr").all()
-        if not rows:
-            rows = page.locator("tr").all()
+        # On cible chaque ligne de joueur grâce à la classe identifiée
+        rows = page.locator("div[class*='css-g5y9jx']").all()
 
+        seen_rows = set()
         for row in rows:
-            cells = row.locator("td, th").all()
-            if cells:
-                row_data = [cell.inner_text().strip() for cell in cells]
-                # On ne garde que les lignes qui contiennent des données exploitables
-                if len(row_data) >= 2:
-                    data.append(row_data)
+            text = row.inner_text().strip()
+            if text:
+                # Sépare chaque info du joueur par saut de ligne pour recréer les colonnes
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
+                # On s'assure d'avoir une ligne de joueur valide (avec plusieurs stats)
+                if 4 <= len(lines) <= 25:
+                    row_tuple = tuple(lines)
+                    if row_tuple not in seen_rows:
+                        seen_rows.add(row_tuple)
+                        data.append(lines)
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and data:
