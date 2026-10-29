@@ -26,11 +26,13 @@ def run():
         # Accès à la page de la sélection / entente
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
-        page.wait_for_timeout(6000)
+        
+        # Pause plus longue pour garantir le rendu complet de l'interface React
+        page.wait_for_timeout(8000)
 
         all_players_data = []
         
-        # Liste des onglets de postes visibles sur l'interface
+        # Mots-clés des onglets de postes
         postes = [
             "GARDIEN", 
             "LIBÉRO", 
@@ -44,37 +46,46 @@ def run():
         for poste in postes:
             print(f"Inspection de l'onglet : {poste}")
             try:
-                # Clic sur l'onglet du poste correspondant
-                tab = page.locator(f"text={poste}").first
-                if tab.is_visible():
-                    tab.click()
-                    # Pause pour laisser le rendu React charger les joueurs de ce poste
-                    page.wait_for_timeout(4000)
-                else:
-                    print(f"Onglet {poste} non visible.")
-                    continue
-            except Exception as e:
-                print(f"Impossible de cliquer sur l'onglet {poste}: {e}")
-                continue
+                # Recherche multi-sélecteurs pour cliquer sur l'onglet
+                # 1. Par texte exact ou insensible à la casse
+                # 2. Par élément cliquable contenant le texte
+                tab_locator = page.locator(f"xpath=//*[contains(translate(text(), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), '{poste}')]").first
 
-            # Recherche des lignes de joueurs avec plusieurs sélecteurs possibles pour être infaillible
-            rows = page.locator("div[class*='css-g5y9jx'], tr, div[class*='player']").all()
-            
+                if tab_locator.is_visible():
+                    tab_locator.click()
+                    page.wait_for_timeout(3000)
+                else:
+                    # Essai de clic forcé en JavaScript si le ciblage standard échoue
+                    page.evaluate(f"""
+                        const el = Array.from(document.querySelectorAll('*')).find(e => e.textContent.trim().toUpperCase() === '{poste}');
+                        if (el) el.click();
+                    """)
+                    page.wait_for_timeout(3000)
+
+            except Exception as e:
+                print(f"Erreur lors du clic sur l'onglet {poste}: {e}")
+
+            # Récupération des lignes de joueurs affichées sous cet onglet
+            rows = page.locator("div[class*='css-g5y9jx']").all()
+            if not rows:
+                rows = page.locator("div[class*='row'], tr").all()
+
             count_joueurs = 0
             for row in rows:
                 try:
                     text = row.inner_text().strip()
                     if text:
                         lines = [l.strip() for l in text.split("\n") if l.strip()]
-                        # On filtre pour ne garder que les lignes qui ressemblent à une fiche joueur (plusieurs stats/infos)
-                        if len(lines) >= 3:
+                        # On vérifie que la ligne contient bien des données de joueurs
+                        if len(lines) >= 3 and poste not in lines[0]:
                             player_info = [poste] + lines
                             if player_info not in all_players_data:
                                 all_players_data.append(player_info)
                                 count_joueurs += 1
                 except Exception:
                     continue
-            print(f"-> {count_joueurs} lignes récupérées pour {poste}.")
+                    
+            print(f"-> {count_joueurs} joueurs récupérés pour {poste}.")
 
         print(f"Total cumulé des lignes trouvées : {len(all_players_data)}")
 
