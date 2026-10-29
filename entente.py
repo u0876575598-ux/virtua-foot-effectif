@@ -31,16 +31,17 @@ def run():
         page.wait_for_timeout(7000)
 
         data = []
-        rows = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
-        if not rows:
-            rows = page.locator("div[class*='css-g5y9jx']").all()
+        
+        # Sélection élargie pour capturer toutes les lignes de joueurs de la sélection
+        rows = page.locator("tr, div[class*='row'], div[class*='player'], div[class*='css-']").all()
 
         seen_rows = set()
         for row in rows:
             text = row.inner_text().strip()
             if text:
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if 5 <= len(lines) <= 25:
+                # On filtre pour garder les lignes qui contiennent plusieurs éléments de stats
+                if len(lines) >= 4:
                     row_tuple = tuple(lines)
                     if row_tuple not in seen_rows:
                         seen_rows.add(row_tuple)
