@@ -3,7 +3,7 @@ name: Virtuafoot Scraper
 on:
   schedule:
     - cron: '0 6 * * *' # S'exécute chaque jour à 6h00 UTC
-  workflow_dispatch: # Permet aussi de le lancer manuellement à tout moment
+  workflow_dispatch: # Permet de le lancer manuellement
 
 jobs:
   run-scraper:
@@ -27,9 +27,6 @@ jobs:
           VF_USERNAME: ${{ secrets.VF_USERNAME }}
           VF_PASSWORD: ${{ secrets.VF_PASSWORD }}
         run: python fetch_virtuafoot.py
-
-      - name: Commit and push CSV update
-
 
       - name: Commit and push CSV update
         run: |
