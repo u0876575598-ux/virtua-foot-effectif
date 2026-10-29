@@ -1,4 +1,5 @@
 import os
+import csv
 from playwright.sync_api import sync_playwright
 
 USERNAME = os.environ.get("VF_USERNAME")
@@ -12,26 +13,38 @@ def run():
         print("Connexion à Virtuafoot...")
         page.goto("https://www.virtuafoot.com/")
 
-        # Remplissage des identifiants dans le formulaire masqué
+        # Identification
         page.fill("form#login input[type='text'], form#login input[name='login'], input[name='login']", USERNAME)
         page.fill("form#login input[type='password'], form#login input[name='pass'], input[name='pass']", PASSWORD)
-        
-        # Soumission et validation de la connexion
         page.locator("form#login button[type='submit'], form#login input[type='submit'], button:has-text('Connexion')").first.click()
 
-        # Attente que la connexion soit effective (par exemple l'apparition de la section news ou home)
+        # Attente de la connexion
         page.wait_for_url("**/#news*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Navigation directe vers la page des joueurs demandée
+        # Accès à la page des joueurs
         print("Récupération de l'effectif...")
         page.goto("https://www.virtuafoot.com/joueurs?view=niv")
-        
-        # --- Insérez ici votre logique de scraping du tableau et d'écriture dans le fichier CSV ---
-        # Exemple de base :
-        # html_content = page.content()
-        # avec pandas ou BeautifulSoup pour extraire les données et générer 'virtuafoot_effectif.csv'
+        page.wait_for_selector("table", timeout=10000)
 
+        # Extraction des données du tableau
+        rows = page.locator("table tr").all()
+        data = []
+
+        for row in rows:
+            # Récupère le texte de chaque cellule (th et td)
+            cells = row.locator("th, td").all_text_contents()
+            cleaned_cells = [cell.strip().replace("\n", " ") for cell in cells if cell.strip()]
+            if cleaned_cells:
+                data.append(cleaned_cells)
+
+        # Ecriture des données dans le fichier CSV
+        csv_filename = "virtuafoot_effectif.csv"
+        with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerows(data)
+
+        print(f"Fichier {csv_filename} généré avec succès avec {len(data)} lignes !")
         browser.close()
 
 if __name__ == "__main__":
