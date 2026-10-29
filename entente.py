@@ -23,41 +23,57 @@ def run():
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès direct à la page de sélection de l'entente
+        # Accès à la page de l'entente
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
-        
-        # Pause pour laisser le rendu React charger tous les éléments
         page.wait_for_timeout(8000)
 
         data = []
-        seen_players = set()
+        
+        # On récupère tous les éléments cliquables représentant les joueurs dans la liste
+        # Sur Virtuafoot, chaque ligne de joueur permet un clic pour voir le profil/stats
+        player_rows = page.locator("div[class*='css-g5y9jx']").all()
+        print(f"Nombre de joueurs détectés dans la liste : {len(player_rows)}")
 
-        # Ciblage précis des lignes individuelles de la liste
-        rows = page.locator("div[class*='css-g5y9jx']").all()
-
-        for row in rows:
-            text = row.inner_text().strip()
-            if text:
-                # Découpage par ligne pour récupérer les cellules unitaires
-                raw_cols = [c.strip() for c in text.split("\n") if c.strip()]
+        for i in range(len(player_rows)):
+            try:
+                # On recharge la liste à chaque tour pour éviter les erreurs de DOM obsolète
+                current_rows = page.locator("div[class*='css-g5y9jx']").all()
+                if i >= len(current_rows):
+                    break
                 
-                # On nettoie et on ne garde que les éléments pertinents (on évite les blocs géants)
-                cols = [c for c in raw_cols if len(c) < 50 and "GOALKEEPER" not in c and "DEFENDER" not in c and "ATTACKING" not in c]
+                row = current_rows[i]
                 
-                # Un joueur valide a un certain nombre de colonnes de stats (ex: Poste, Nom, Pourcentage, Note, etc.)
-                if 3 <= len(cols) <= 12:
-                    player_name = cols[1] if len(cols) > 1 else cols[0]
-                    
-                    if player_name not in seen_players:
-                        seen_players.add(player_name)
-                        data.append(cols)
+                # Récupération du texte de base de la ligne avant le clic
+                base_text = row.inner_text().strip()
+                if not base_text:
+                    continue
 
-        print(f"Nombre de joueurs uniques extraits proprement : {len(data)}")
+                # CLIC sur le joueur pour charger ses stats détaillées
+                row.click()
+                # Pause pour laisser le panneau ou les stats du joueur s'actualiser à l'écran
+                page.wait_for_timeout(2500)
+
+                # Extraction des données textuelles de la ligne (ou de la zone active mise à jour)
+                # On capture les éléments visibles de la ligne active
+                active_text = row.inner_text().strip()
+                cols = [c.strip() for c in active_text.split("\n") if c.strip()]
+                
+                # Nettoyage pour garder un format de ligne propre
+                cols = [c for c in cols if len(c) < 50]
+
+                if cols and cols not in data:
+                    data.append(cols)
+
+            except Exception as e:
+                print(f"Erreur lors du clic sur le joueur {i+1}: {e}")
+                continue
+
+        print(f"Total de lignes de joueurs récupérées avec clics : {len(data)}")
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
         if WEBHOOK_URL and data:
-            print("Synchronisation propre vers la feuille 'Sélection'...")
+            print("Synchronisation vers la feuille 'Sélection'...")
             try:
                 payload_dict = {
                     "sheetName": "Sélection",
