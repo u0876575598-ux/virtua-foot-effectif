@@ -32,20 +32,37 @@ def run():
 
         data = []
         
-        # On cible chaque ligne de joueur grâce à la classe identifiée
+        # On cible chaque conteneur de ligne de joueur
         rows = page.locator("div[class*='css-g5y9jx']").all()
 
         seen_rows = set()
         for row in rows:
-            text = row.inner_text().strip()
-            if text:
-                # Sépare chaque info du joueur par saut de ligne pour recréer les colonnes
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                # On s'assure d'avoir une ligne de joueur valide (avec plusieurs stats)
-                if 4 <= len(lines) <= 25:
-                    row_tuple = tuple(lines)
-                    if row_tuple not in seen_rows:
-                        seen_rows.add(row_tuple)
+            # On cherche tous les sous-éléments ou cellules à l'intérieur de la ligne
+            cells = row.locator("div, span").all()
+            
+            row_data = []
+            for cell in cells:
+                # On évite d'attraper les conteneurs imbriqués globaux pour ne garder que les valeurs textuelles finales
+                sub_text = cell.inner_text().strip()
+                if sub_text and "\n" not in sub_text: # On prend les textes unitaires
+                    if sub_text not in row_data:
+                        row_data.append(sub_text)
+
+            # Si on a détecté plusieurs caractéristiques pour ce joueur
+            if len(row_data) >= 3:
+                row_tuple = tuple(row_data)
+                if row_tuple not in seen_rows:
+                    seen_rows.add(row_tuple)
+                    data.append(row_data)
+
+        # Si la méthode cellule par cellule est trop fine et ne renvoie rien, on bascule sur un découpage propre des lignes
+        if not data:
+            print("Méthode fine infructueuse, basculement sur le découpage structuré...")
+            for row in rows:
+                text = row.inner_text().strip()
+                if text:
+                    lines = [l.strip() for l in text.split("\n") if l.strip()]
+                    if 4 <= len(lines) <= 25:
                         data.append(lines)
 
         # Synchronisation vers la feuille "Sélection" via le Webhook
