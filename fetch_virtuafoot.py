@@ -8,17 +8,44 @@ USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
 WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
-URL_CAMARADE_EFFECTIF = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
+# Les 27 URL exactes de l'effectif du camarade
+URLS_CAMARADE = [
+    "https://www.virtuafoot.com/#joueur?jid=584853",
+    "https://www.virtuafoot.com/#joueur?jid=552785",
+    "https://www.virtuafoot.com/#joueur?jid=635131",
+    "https://www.virtuafoot.com/#joueur?jid=600076",
+    "https://www.virtuafoot.com/#joueur?jid=557417",
+    "https://www.virtuafoot.com/#joueur?jid=593718",
+    "https://www.virtuafoot.com/#joueur?jid=612050",
+    "https://www.virtuafoot.com/#joueur?jid=591503",
+    "https://www.virtuafoot.com/#joueur?jid=594089",
+    "https://www.virtuafoot.com/#joueur?jid=648691",
+    "https://www.virtuafoot.com/#joueur?jid=562630",
+    "https://www.virtuafoot.com/#joueur?jid=672684",
+    "https://www.virtuafoot.com/#joueur?jid=647352",
+    "https://www.virtuafoot.com/#joueur?jid=642931",
+    "https://www.virtuafoot.com/#joueur?jid=599839",
+    "https://www.virtuafoot.com/#joueur?jid=633740",
+    "https://www.virtuafoot.com/#joueur?jid=643289",
+    "https://www.virtuafoot.com/#joueur?jid=672333",
+    "https://www.virtuafoot.com/#joueur?jid=581812",
+    "https://www.virtuafoot.com/#joueur?jid=656073",
+    "https://www.virtuafoot.com/#joueur?jid=644830",
+    "https://www.virtuafoot.com/#joueur?jid=622252",
+    "https://www.virtuafoot.com/#joueur?jid=649331",
+    "https://www.virtuafoot.com/#joueur?jid=624501",
+    "https://www.virtuafoot.com/#joueur?jid=664507",
+    "https://www.virtuafoot.com/#joueur?jid=648968",
+    "https://www.virtuafoot.com/#joueur?jid=637479"
+]
 
 def clean_strict_rows(raw_blocks):
-    """Filtre pour ne garder que les lignes individuelles de joueurs propres."""
+    """Filtre strict pour ne garder que les lignes propres de 4 éléments."""
     cleaned = []
     seen = set()
     for block in raw_blocks:
         if isinstance(block, list):
             flat_lines = [item.strip() for item in block if item.strip()]
-            
-            # Un joueur unitaire propre a exactement 4 blocs d'infos (Poste, Nom, Âge, Note)
             if len(flat_lines) == 4:
                 row_tuple = tuple(flat_lines)
                 if row_tuple not in seen:
@@ -76,35 +103,26 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE VIA LA VUE NIVEAU
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE VIA LES 27 URL
         # ====================================================
-        print("\n--- Accès et extraction de l'effectif du camarade ---")
-        page.goto(URL_CAMARADE_EFFECTIF)
-        page.wait_for_timeout(8000)
-
-        print("Défilement de la page pour charger l'effectif...")
-        for _ in range(4):
-            page.keyboard.press("PageDown")
-            page.wait_for_timeout(1000)
-
+        print(f"\n--- Extraction des {len(URLS_CAMARADE)} joueurs du camarade ---")
         data_camarade_raw = []
-        club_rows = page.locator("div[class*='css-g5y9jx']").all()
 
-        for row in club_rows:
+        for url in URLS_CAMARADE:
             try:
-                text = row.inner_text().strip()
-                if text:
-                    lines = [l.strip() for l in text.split("\n") if l.strip()]
-                    
-                    # Filtre anti-menus généraux du club
-                    joined_text = " ".join(lines).upper()
-                    if any(kw in joined_text for kw in ["STADIUM", "LEVEL", "AWARDS", "RATING", "TRANSFERS", "SCORERS", "PALMARES"]):
-                        continue
+                page.goto(url)
+                page.wait_for_selector("div[class*='css-g5y9jx']", timeout=10000)
+                page.wait_for_timeout(1500)
 
-                    if len(lines) >= 4:
-                        data_camarade_raw.append(lines)
-            except Exception:
-                continue
+                player_blocks = page.locator("div[class*='css-g5y9jx']").all()
+                for block in player_blocks:
+                    text = block.inner_text().strip()
+                    if text:
+                        lines = [l.strip() for l in text.split("\n") if l.strip()]
+                        if len(lines) >= 4:
+                            data_camarade_raw.append(lines)
+            except Exception as e:
+                print(f"Erreur sur l'URL {url}: {e}")
 
         data_camarade = clean_strict_rows(data_camarade_raw)
 
