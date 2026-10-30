@@ -8,7 +8,7 @@ USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
 WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
-URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
+URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237"
 
 def run():
     with sync_playwright() as p:
@@ -59,7 +59,15 @@ def run():
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
-        page.wait_for_timeout(8000)  # Laisse le temps de charger
+        page.wait_for_timeout(5000)
+
+        # Clic sur l'onglet "Effectif" du club de ton camarade
+        try:
+            print("Clic sur l'onglet Effectif du club...")
+            page.locator("text=Effectif").first.click()
+            page.wait_for_timeout(5000)
+        except Exception as e:
+            print(f"Impossible de cliquer automatiquement sur l'onglet Effectif : {e}")
 
         print("Défilement de la page pour charger les données...")
         for _ in range(3):
@@ -67,27 +75,25 @@ def run():
             page.wait_for_timeout(1000)
 
         data_camarade = []
-        
-        # Ciblage direct des lignes de tableaux (tr) ou des cellules de la page club
-        table_rows = page.locator("table tr, tr").all()
-        print(f"Lignes de tableaux détectées sur la page du camarade : {len(table_rows)}")
+        rows_camarade = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
+        if not rows_camarade:
+            rows_camarade = page.locator("div[class*='css-g5y9jx']").all()
 
-        seen_camarade = set()
-        for row in table_rows:
-            try:
-                text = row.inner_text().strip()
-                if text:
-                    cols = [c.strip() for c in text.split("\n") if c.strip()]
-                    # On garde les lignes qui ont plusieurs colonnes (typiquement un joueur)
-                    if len(cols) >= 3:
-                        row_tuple = tuple(cols)
-                        if row_tuple not in seen_camarade:
-                            seen_camarade.add(row_tuple)
-                            data_camarade.append(cols)
-            except Exception:
-                continue
+        seen_rows_camarade = set()
+        for row in rows_camarade:
+            text = row.inner_text().strip()
+            if text:
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
+                if 5 <= len(lines) <= 25:
+                    row_tuple = tuple(lines)
+                    if row_tuple not in seen_rows_camarade:
+                        seen_rows_camarade.add(row_tuple)
+                        data_camarade.append(lines)
 
-        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} lignes valides).")
+        with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerows(data_camarade)
+        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} lignes).")
 
         # ====================================================
         # 3. SYNCHRONISATION COMBINÉE VERS GOOGLE SHEETS
@@ -105,7 +111,7 @@ def run():
                     headers={"Content-Type": "application/json"}
                 )
                 with urllib.request.urlopen(req) as response:
-                    print("Synchronisation réussie !")
+                    print("Synchronisation réussie ! Les onglets Mon_Effectif et Effectif_Camarade ont été mis à jour.")
             except Exception as e:
                 print(f"Erreur lors de la synchronisation Webhook : {e}")
         else:
