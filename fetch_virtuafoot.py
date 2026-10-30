@@ -39,16 +39,16 @@ URLS_CAMARADE = [
     "https://www.virtuafoot.com/#joueur?jid=637479"
 ]
 
-def clean_player_data(raw_text_lines):
-    """Nettoie et formate les lignes d'une fiche joueur pour garder uniquement les stats et infos utiles."""
+def clean_player_attributes(raw_lines):
+    """Filtre et ne garde que les informations essentielles du joueur pour un affichage propre."""
     cleaned = []
-    # Mots-clés parasites à ignorer s'ils apparaissent dans les lignes isolées
-    ignore_words = ["Ouvrir des négociations", "Club formateur", "Palmarès", "Historique", "Matchs", "Buteurs"]
+    # Ignore les bruits de navigation ou menus inutiles
+    skip_list = ["Ouvrir des négociations", "Club formateur", "Palmarès", "Historique", "Matchs", "Buteurs", "Biographie", "Statistiques"]
     
-    for line in raw_text_lines:
-        line_str = line.strip()
-        if line_str and not any(w in line_str for w in ignore_words):
-            cleaned.append(line_str)
+    for line in raw_lines:
+        l = line.strip()
+        if l and not any(skip in l for skip in skip_list):
+            cleaned.append(l)
     return cleaned
 
 def run():
@@ -96,7 +96,7 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DÉTAILLÉE DES 27 JOUEURS DU CAMARADE
+        # 2. EXTRACTION CIBLÉE DES 27 JOUEURS DU CAMARADE
         # ====================================================
         print(f"\n--- Extraction des {len(URLS_CAMARADE)} joueurs du camarade ---")
         data_camarade = []
@@ -105,43 +105,36 @@ def run():
         for idx, url in enumerate(URLS_CAMARADE, 1):
             try:
                 page.goto(url)
-                # Attente active que le bloc de stats ou la fiche soit complètement chargé
-                page.wait_for_selector("div[class*='css-g5y9jx']", timeout=12000)
+                page.wait_for_selector("div[class*='css-g5y9jx']", timeout=10000)
                 page.wait_for_timeout(1500)
 
-                # Récupération de tous les blocs de texte structurés de la fiche du joueur
+                # Récupération des blocs de la fiche joueur
                 blocks = page.locator("div[class*='css-g5y9jx']").all()
-                player_raw_lines = []
-                for block in blocks:
-                    t = block.inner_text().strip()
+                raw_lines = []
+                for b in blocks:
+                    t = b.inner_text().strip()
                     if t:
-                        sub_lines = [s.strip() for s in t.split("\n") if s.strip()]
-                        player_raw_lines.extend(sub_lines)
+                        raw_lines.extend([s.strip() for s in t.split("\n") if s.strip()])
 
-                # Si les blocs ciblés sont vides, on prend le texte global de la page
-                if not player_raw_lines:
-                    body_text = page.locator("body").inner_text()
-                    if body_text:
-                        player_raw_lines = [l.strip() for l in body_text.split("\n") if l.strip()]
+                # Nettoyage
+                player_row = clean_player_attributes(raw_lines)
 
-                formatted_player = clean_player_data(player_raw_lines)
-
-                if formatted_player:
-                    row_tuple = tuple(formatted_player)
+                if player_row:
+                    row_tuple = tuple(player_row)
                     if row_tuple not in seen_camarade:
                         seen_camarade.add(row_tuple)
-                        data_camarade.append(formatted_player)
-                print(f"Joueur {idx}/27 extrait ({len(formatted_player)} attributs).")
+                        data_camarade.append(player_row)
+                print(f"Joueur {idx}/27 traité.")
             except Exception as e:
-                print(f"Erreur sur le joueur {idx} ({url}): {e}")
+                print(f"Erreur sur le joueur {idx}: {e}")
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerows(data_camarade)
-        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} fiches détaillées).")
+        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} fiches).")
 
         # ====================================================
-        # 3. SYNCHRONISATION COMBINÉE VERS GOOGLE SHEETS
+        # 3. SYNCHRONISATION VERS GOOGLE SHEETS
         # ====================================================
         if WEBHOOK_URL:
             print("\nSynchronisation des 2 effectifs avec Google Sheets...")
