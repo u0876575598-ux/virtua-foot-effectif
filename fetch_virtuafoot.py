@@ -8,7 +8,6 @@ USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
 WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
-# URL combinée pour aller directement sur la vue "niveau" de l'effectif du camarade
 URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
 
 def run():
@@ -56,27 +55,32 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (AVEC &view=niv)
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
-        page.wait_for_timeout(7000)
+        page.wait_for_timeout(8000)  # Un peu plus de temps pour laisser React charger les données du club
+
+        print("Défilement de la page pour charger les données...")
+        for _ in range(4):
+            page.keyboard.press("PageDown")
+            page.wait_for_timeout(1000)
 
         data_camarade = []
-        rows_camarade = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
         
-        if not rows_camarade:
-            rows_camarade = page.locator("div[class*='css-g5y9jx']").all()
-
-        seen_rows_camarade = set()
+        # Ciblage élargi des lignes de la page (tableaux, blocs de joueurs et lignes structurées)
+        rows_camarade = page.locator("tr, div[class*='css-g5y9jx'], div[class*='row']").all()
+        
+        seen_camarade = set()
         for row in rows_camarade:
             text = row.inner_text().strip()
             if text:
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if 5 <= len(lines) <= 25:
+                # On filtre pour récupérer les lignes contenant des données de joueurs valides
+                if 3 <= len(lines) <= 25:
                     row_tuple = tuple(lines)
-                    if row_tuple not in seen_rows_camarade:
-                        seen_rows_camarade.add(row_tuple)
+                    if row_tuple not in seen_camarade:
+                        seen_camarade.add(row_tuple)
                         data_camarade.append(lines)
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
