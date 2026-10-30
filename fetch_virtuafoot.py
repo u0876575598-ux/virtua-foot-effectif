@@ -39,27 +39,22 @@ URLS_CAMARADE = [
     "https://www.virtuafoot.com/#joueur?jid=637479"
 ]
 
-def clean_strict_rows(raw_blocks):
-    """Filtre strict pour ne garder que les lignes propres de 4 éléments."""
+def clean_and_condense_player(raw_lines):
+    """Extrait et condense les informations vitales pour tenir sur une ligne propre."""
+    # On cherche à filtrer les éléments parasites et garder l'essentiel
     cleaned = []
-    seen = set()
-    for block in raw_blocks:
-        if isinstance(block, list):
-            flat_lines = [item.strip() for item in block if item.strip()]
-            if len(flat_lines) == 4:
-                row_tuple = tuple(flat_lines)
-                if row_tuple not in seen:
-                    seen.add(row_tuple)
-                    cleaned.append(flat_lines)
-            elif len(flat_lines) > 4:
-                for i in range(0, len(flat_lines) - 3, 4):
-                    chunk = flat_lines[i:i+4]
-                    if len(chunk) == 4:
-                        row_tuple = tuple(chunk)
-                        if row_tuple not in seen:
-                            seen.add(row_tuple)
-                            cleaned.append(chunk)
-    return cleaned
+    skip_keywords = ["Biography", "Ouvrir des négociations", "Club formateur", "Palmarès", "Historique", "Matchs", "Buteurs", "LEVEL", "W-2", "W-1"]
+    
+    for line in raw_lines:
+        l = line.strip()
+        if l and not any(kw in l for kw in skip_keywords):
+            # Évite d'ajouter les échelles de notes chiffrées (20, 40, 60...)
+            if l not in ["20", "40", "60", "80", "100"]:
+                cleaned.append(l)
+                
+    # On s'assure d'isoler les éléments clés si la liste est trop longue
+    # Par exemple, on peut filtrer pour ne garder que les données tabulaires utiles
+    return cleaned[:15] # Limite raisonnable pour éviter l'étalement horizontal excessif
 
 def run():
     with sync_playwright() as p:
@@ -83,19 +78,21 @@ def run():
         page.goto("https://www.virtuafoot.com/#joueurs?view=niv")
         page.wait_for_timeout(7000)
 
-        data_perso_raw = []
+        data_perso = []
         rows = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
         if not rows:
             rows = page.locator("div[class*='css-g5y9jx']").all()
 
+        seen_rows = set()
         for row in rows:
             text = row.inner_text().strip()
             if text:
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if len(lines) >= 4:
-                    data_perso_raw.append(lines)
-
-        data_perso = clean_strict_rows(data_perso_raw)
+                if 4 <= len(lines) <= 25:
+                    row_tuple = tuple(lines)
+                    if row_tuple not in seen_rows:
+                        seen_rows.add(row_tuple)
+                        data_perso.append(lines)
 
         with open("virtuafoot_effectif.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -103,28 +100,35 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE VIA LES 27 URL
+        # 2. EXTRACTION CONDENSÉE DES 27 JOUEURS DU CAMARADE
         # ====================================================
         print(f"\n--- Extraction des {len(URLS_CAMARADE)} joueurs du camarade ---")
-        data_camarade_raw = []
+        data_camarade = []
+        seen_camarade = set()
 
-        for url in URLS_CAMARADE:
+        for idx, url in enumerate(URLS_CAMARADE, 1):
             try:
                 page.goto(url)
                 page.wait_for_selector("div[class*='css-g5y9jx']", timeout=10000)
                 page.wait_for_timeout(1500)
 
-                player_blocks = page.locator("div[class*='css-g5y9jx']").all()
-                for block in player_blocks:
-                    text = block.inner_text().strip()
-                    if text:
-                        lines = [l.strip() for l in text.split("\n") if l.strip()]
-                        if len(lines) >= 4:
-                            data_camarade_raw.append(lines)
-            except Exception as e:
-                print(f"Erreur sur l'URL {url}: {e}")
+                blocks = page.locator("div[class*='css-g5y9jx']").all()
+                raw_lines = []
+                for b in blocks:
+                    t = b.inner_text().strip()
+                    if t:
+                        raw_lines.extend([s.strip() for s in t.split("\n") if s.strip()])
 
-        data_camarade = clean_strict_rows(data_camarade_raw)
+                condensed_row = clean_and_condense_player(raw_lines)
+
+                if condensed_row:
+                    row_tuple = tuple(condensed_row)
+                    if row_tuple not in seen_camarade:
+                        seen_camarade.add(row_tuple)
+                        data_camarade.append(condensed_row)
+                print(f"Joueur {idx}/27 condensé.")
+            except Exception as e:
+                print(f"Erreur sur le joueur {idx}: {e}")
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -132,7 +136,7 @@ def run():
         print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} lignes).")
 
         # ====================================================
-        # 3. SYNCHRONISATION COMBINÉE VERS GOOGLE SHEETS
+        # 3. SYNCHRONISATION VERS GOOGLE SHEETS
         # ====================================================
         if WEBHOOK_URL:
             print("\nSynchronisation des 2 effectifs avec Google Sheets...")
