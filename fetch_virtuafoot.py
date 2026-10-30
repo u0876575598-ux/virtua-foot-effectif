@@ -11,23 +11,24 @@ WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
 
 def clean_rows(raw_blocks):
-    """Transforme chaque bloc trouvé en une liste propre de colonnes/cellules."""
+    """Nettoie, aplatit et filtre les blocs pour ne garder que des lignes de joueurs unitaires propres."""
     cleaned = []
+    seen = set()
     for block in raw_blocks:
         if isinstance(block, list):
-            # Si le bloc contient déjà des lignes, on les rassemble ou on garde les lignes valides
             flat_lines = []
             for item in block:
                 if isinstance(item, str):
                     flat_lines.extend([sub.strip() for sub in item.split("\n") if sub.strip()])
                 else:
                     flat_lines.append(str(item))
-            if flat_lines:
-                cleaned.append(flat_lines)
-        elif isinstance(block, str):
-            lines = [l.strip() for l in block.split("\n") if l.strip()]
-            if lines:
-                cleaned.append(lines)
+            
+            # Une ligne de joueur valide a généralement entre 3 et 10 éléments (Numéro, Poste, Nom, Âge, Note...)
+            if 3 <= len(flat_lines) <= 12:
+                row_tuple = tuple(flat_lines)
+                if row_tuple not in seen:
+                    seen.add(row_tuple)
+                    cleaned.append(flat_lines)
     return cleaned
 
 def run():
@@ -89,9 +90,9 @@ def run():
             page.wait_for_timeout(1000)
 
         data_camarade_raw = []
-        player_blocks = page.locator("div[class*='css-'], div[class*='row']").all()
+        # On cible uniquement les sous-éléments précis (on évite 'div[class*="row"]' qui englobe tout)
+        player_blocks = page.locator("div[class*='css-']").all()
         
-        seen_camarade = set()
         for block in player_blocks:
             try:
                 text = block.inner_text().strip()
@@ -100,14 +101,12 @@ def run():
                     
                     # Filtre anti-menus du club
                     joined_text = " ".join(lines).upper()
-                    if any(keyword in joined_text for keyword in ["STADIUM", "LEVEL", "AWARDS", "RATING", "TRANSFERS", "SCORERS"]):
+                    if any(keyword in joined_text for keyword in ["STADIUM", "LEVEL", "AWARDS", "RATING", "TRANSFERS", "SCORERS", "PALMARES"]):
                         continue
 
-                    if 4 <= len(lines) <= 25:
-                        row_tuple = tuple(lines)
-                        if row_tuple not in seen_camarade:
-                            seen_camarade.add(row_tuple)
-                            data_camarade_raw.append(lines)
+                    # On ne garde que les blocs de taille unitaire (1 seul joueur par bloc)
+                    if 3 <= len(lines) <= 12:
+                        data_camarade_raw.append(lines)
             except Exception:
                 continue
 
