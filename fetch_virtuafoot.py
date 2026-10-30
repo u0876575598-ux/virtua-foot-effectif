@@ -59,7 +59,7 @@ def run():
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
-        page.wait_for_timeout(8000)  # Un peu plus de temps pour laisser React charger les données du club
+        page.wait_for_timeout(8000)  # On laisse bien le temps à React de charger
 
         print("Défilement de la page pour charger les données...")
         for _ in range(4):
@@ -68,20 +68,23 @@ def run():
 
         data_camarade = []
         
-        # Ciblage élargi des lignes de la page (tableaux, blocs de joueurs et lignes structurées)
-        rows_camarade = page.locator("tr, div[class*='css-g5y9jx'], div[class*='row']").all()
+        # Ciblage direct des lignes de tableau ou des conteneurs de joueurs de la page club
+        rows_camarade = page.locator("tr, div[class*='css-']").all()
         
         seen_camarade = set()
         for row in rows_camarade:
-            text = row.inner_text().strip()
-            if text:
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                # On filtre pour récupérer les lignes contenant des données de joueurs valides
-                if 3 <= len(lines) <= 25:
-                    row_tuple = tuple(lines)
-                    if row_tuple not in seen_camarade:
-                        seen_camarade.add(row_tuple)
-                        data_camarade.append(lines)
+            try:
+                text = row.inner_text().strip()
+                if text:
+                    lines = [l.strip() for l in text.split("\n") if l.strip()]
+                    # Filtrage strict pour ne garder que les lignes d'effectif valides
+                    if 4 <= len(lines) <= 25:
+                        row_tuple = tuple(lines)
+                        if row_tuple not in seen_camarade:
+                            seen_camarade.add(row_tuple)
+                            data_camarade.append(lines)
+            except Exception:
+                continue
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
