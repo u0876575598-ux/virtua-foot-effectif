@@ -8,28 +8,7 @@ USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
 WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
-URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
-
-def clean_rows(raw_blocks):
-    """Nettoie, aplatit et filtre les blocs pour ne garder que des lignes de joueurs unitaires propres."""
-    cleaned = []
-    seen = set()
-    for block in raw_blocks:
-        if isinstance(block, list):
-            flat_lines = []
-            for item in block:
-                if isinstance(item, str):
-                    flat_lines.extend([sub.strip() for sub in item.split("\n") if sub.strip()])
-                else:
-                    flat_lines.append(str(item))
-            
-            # Une ligne de joueur valide a généralement entre 3 et 10 éléments (Numéro, Poste, Nom, Âge, Note...)
-            if 3 <= len(flat_lines) <= 12:
-                row_tuple = tuple(flat_lines)
-                if row_tuple not in seen:
-                    seen.add(row_tuple)
-                    cleaned.append(flat_lines)
-    return cleaned
+URL_CAMARADE_EFFECTIF = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
 
 def run():
     with sync_playwright() as p:
@@ -54,7 +33,7 @@ def run():
         page.goto("https://www.virtuafoot.com/#joueurs?view=niv")
         page.wait_for_timeout(7000)
 
-        data_perso_raw = []
+        data_perso = []
         rows = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
         if not rows:
             rows = page.locator("div[class*='css-g5y9jx']").all()
@@ -68,9 +47,7 @@ def run():
                     row_tuple = tuple(lines)
                     if row_tuple not in seen_rows:
                         seen_rows.add(row_tuple)
-                        data_perso_raw.append(lines)
-
-        data_perso = clean_rows(data_perso_raw)
+                        data_perso.append(lines)
 
         with open("virtuafoot_effectif.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -78,44 +55,56 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (CLIC / NAVIGATION JOUEUR PAR JOUEUR)
         # ====================================================
-        print("\n--- Accès et extraction de l'effectif du camarade ---")
-        page.goto(URL_CAMARADE)
+        print("\n--- Accès et extraction détaillée de l'effectif du camarade ---")
+        page.goto(URL_CAMARADE_EFFECTIF)
         page.wait_for_timeout(8000)
 
-        print("Défilement de la page pour charger les données...")
-        for _ in range(4):
-            page.keyboard.press("PageDown")
-            page.wait_for_timeout(1000)
-
-        data_camarade_raw = []
-        # On cible uniquement les sous-éléments précis (on évite 'div[class*="row"]' qui englobe tout)
-        player_blocks = page.locator("div[class*='css-']").all()
+        # Récupération de tous les liens de joueurs présents sur la page du club
+        player_links = []
+        links_locator = page.locator("a[href*='joueur']")
+        count = links_locator.count()
         
-        for block in player_blocks:
+        for i in range(count):
+            href = links_locator.nth(i).get_attribute("href")
+            if href and href not in player_links:
+                player_links.append(href)
+
+        print(f"{len(player_links)} joueurs détectés chez le camarade. Extraction des détails...")
+
+        data_camarade = []
+        seen_camarade = set()
+
+        for link in player_links:
             try:
-                text = block.inner_text().strip()
-                if text:
-                    lines = [l.strip() for l in text.split("\n") if l.strip()]
-                    
-                    # Filtre anti-menus du club
-                    joined_text = " ".join(lines).upper()
-                    if any(keyword in joined_text for keyword in ["STADIUM", "LEVEL", "AWARDS", "RATING", "TRANSFERS", "SCORERS", "PALMARES"]):
-                        continue
+                full_url = f"https://www.virtuafoot.com/{link}" if not link.startswith("http") else link
+                page.goto(full_url)
+                page.wait_for_timeout(2000) # Laisse charger la fiche du joueur
 
-                    # On ne garde que les blocs de taille unitaire (1 seul joueur par bloc)
-                    if 3 <= len(lines) <= 12:
-                        data_camarade_raw.append(lines)
-            except Exception:
+                # Extraction des blocs de statistiques de la fiche du joueur
+                stat_blocks = page.locator("div[class*='css-g5y9jx'], div[class*='row'], table tr").all()
+                player_data = []
+                
+                for block in stat_blocks:
+                    t = block.inner_text().strip()
+                    if t:
+                        sub_lines = [s.strip() for s in t.split("\n") if s.strip()]
+                        player_data.extend(sub_lines)
+
+                if player_data:
+                    row_tuple = tuple(player_data)
+                    if row_tuple not in seen_camarade:
+                        seen_camarade.add(row_tuple)
+                        data_camarade.append(player_data)
+            except Exception as e:
+                print(f"Erreur sur un joueur : {e}")
                 continue
-
-        data_camarade = clean_rows(data_camarade_raw)
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerows(data_camarade)
-        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} lignes filtrées).")
+        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} fiches détaillées).")
 
         # ====================================================
         # 3. SYNCHRONISATION COMBINÉE VERS GOOGLE SHEETS
