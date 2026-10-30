@@ -8,47 +8,30 @@ USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
 WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
-# Les 27 URL exactes de l'effectif du camarade
-URLS_CAMARADE = [
-    "https://www.virtuafoot.com/#joueur?jid=584853",
-    "https://www.virtuafoot.com/#joueur?jid=552785",
-    "https://www.virtuafoot.com/#joueur?jid=635131",
-    "https://www.virtuafoot.com/#joueur?jid=600076",
-    "https://www.virtuafoot.com/#joueur?jid=557417",
-    "https://www.virtuafoot.com/#joueur?jid=593718",
-    "https://www.virtuafoot.com/#joueur?jid=612050",
-    "https://www.virtuafoot.com/#joueur?jid=591503",
-    "https://www.virtuafoot.com/#joueur?jid=594089",
-    "https://www.virtuafoot.com/#joueur?jid=648691",
-    "https://www.virtuafoot.com/#joueur?jid=562630",
-    "https://www.virtuafoot.com/#joueur?jid=672684",
-    "https://www.virtuafoot.com/#joueur?jid=647352",
-    "https://www.virtuafoot.com/#joueur?jid=642931",
-    "https://www.virtuafoot.com/#joueur?jid=599839",
-    "https://www.virtuafoot.com/#joueur?jid=633740",
-    "https://www.virtuafoot.com/#joueur?jid=643289",
-    "https://www.virtuafoot.com/#joueur?jid=672333",
-    "https://www.virtuafoot.com/#joueur?jid=581812",
-    "https://www.virtuafoot.com/#joueur?jid=656073",
-    "https://www.virtuafoot.com/#joueur?jid=644830",
-    "https://www.virtuafoot.com/#joueur?jid=622252",
-    "https://www.virtuafoot.com/#joueur?jid=649331",
-    "https://www.virtuafoot.com/#joueur?jid=624501",
-    "https://www.virtuafoot.com/#joueur?jid=664507",
-    "https://www.virtuafoot.com/#joueur?jid=648968",
-    "https://www.virtuafoot.com/#joueur?jid=637479"
-]
+URL_CAMARADE_EFFECTIF = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
 
-def clean_player_attributes(raw_lines):
-    """Filtre et ne garde que les informations essentielles du joueur pour un affichage propre."""
+def clean_strict_rows(raw_blocks):
+    """Filtre pour ne garder que les lignes individuelles de joueurs propres."""
     cleaned = []
-    # Ignore les bruits de navigation ou menus inutiles
-    skip_list = ["Ouvrir des négociations", "Club formateur", "Palmarès", "Historique", "Matchs", "Buteurs", "Biographie", "Statistiques"]
-    
-    for line in raw_lines:
-        l = line.strip()
-        if l and not any(skip in l for skip in skip_list):
-            cleaned.append(l)
+    seen = set()
+    for block in raw_blocks:
+        if isinstance(block, list):
+            flat_lines = [item.strip() for item in block if item.strip()]
+            
+            # Un joueur unitaire propre a exactement 4 blocs d'infos (Poste, Nom, Âge, Note)
+            if len(flat_lines) == 4:
+                row_tuple = tuple(flat_lines)
+                if row_tuple not in seen:
+                    seen.add(row_tuple)
+                    cleaned.append(flat_lines)
+            elif len(flat_lines) > 4:
+                for i in range(0, len(flat_lines) - 3, 4):
+                    chunk = flat_lines[i:i+4]
+                    if len(chunk) == 4:
+                        row_tuple = tuple(chunk)
+                        if row_tuple not in seen:
+                            seen.add(row_tuple)
+                            cleaned.append(chunk)
     return cleaned
 
 def run():
@@ -59,7 +42,6 @@ def run():
         print("Connexion à Virtuafoot...")
         page.goto("https://www.virtuafoot.com/")
 
-        # Identification
         page.fill("form#login input[type='text'], form#login input[name='login'], input[name='login']", USERNAME)
         page.fill("form#login input[type='password'], form#login input[name='pass'], input[name='pass']", PASSWORD)
         page.locator("form#login button[type='submit'], form#login input[type='submit'], button:has-text('Connexion')").first.click()
@@ -74,21 +56,19 @@ def run():
         page.goto("https://www.virtuafoot.com/#joueurs?view=niv")
         page.wait_for_timeout(7000)
 
-        data_perso = []
+        data_perso_raw = []
         rows = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
         if not rows:
             rows = page.locator("div[class*='css-g5y9jx']").all()
 
-        seen_rows = set()
         for row in rows:
             text = row.inner_text().strip()
             if text:
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if 4 <= len(lines) <= 25:
-                    row_tuple = tuple(lines)
-                    if row_tuple not in seen_rows:
-                        seen_rows.add(row_tuple)
-                        data_perso.append(lines)
+                if len(lines) >= 4:
+                    data_perso_raw.append(lines)
+
+        data_perso = clean_strict_rows(data_perso_raw)
 
         with open("virtuafoot_effectif.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -96,45 +76,45 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION CIBLÉE DES 27 JOUEURS DU CAMARADE
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE VIA LA VUE NIVEAU
         # ====================================================
-        print(f"\n--- Extraction des {len(URLS_CAMARADE)} joueurs du camarade ---")
-        data_camarade = []
-        seen_camarade = set()
+        print("\n--- Accès et extraction de l'effectif du camarade ---")
+        page.goto(URL_CAMARADE_EFFECTIF)
+        page.wait_for_timeout(8000)
 
-        for idx, url in enumerate(URLS_CAMARADE, 1):
+        print("Défilement de la page pour charger l'effectif...")
+        for _ in range(4):
+            page.keyboard.press("PageDown")
+            page.wait_for_timeout(1000)
+
+        data_camarade_raw = []
+        club_rows = page.locator("div[class*='css-g5y9jx']").all()
+
+        for row in club_rows:
             try:
-                page.goto(url)
-                page.wait_for_selector("div[class*='css-g5y9jx']", timeout=10000)
-                page.wait_for_timeout(1500)
+                text = row.inner_text().strip()
+                if text:
+                    lines = [l.strip() for l in text.split("\n") if l.strip()]
+                    
+                    # Filtre anti-menus généraux du club
+                    joined_text = " ".join(lines).upper()
+                    if any(kw in joined_text for kw in ["STADIUM", "LEVEL", "AWARDS", "RATING", "TRANSFERS", "SCORERS", "PALMARES"]):
+                        continue
 
-                # Récupération des blocs de la fiche joueur
-                blocks = page.locator("div[class*='css-g5y9jx']").all()
-                raw_lines = []
-                for b in blocks:
-                    t = b.inner_text().strip()
-                    if t:
-                        raw_lines.extend([s.strip() for s in t.split("\n") if s.strip()])
+                    if len(lines) >= 4:
+                        data_camarade_raw.append(lines)
+            except Exception:
+                continue
 
-                # Nettoyage
-                player_row = clean_player_attributes(raw_lines)
-
-                if player_row:
-                    row_tuple = tuple(player_row)
-                    if row_tuple not in seen_camarade:
-                        seen_camarade.add(row_tuple)
-                        data_camarade.append(player_row)
-                print(f"Joueur {idx}/27 traité.")
-            except Exception as e:
-                print(f"Erreur sur le joueur {idx}: {e}")
+        data_camarade = clean_strict_rows(data_camarade_raw)
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerows(data_camarade)
-        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} fiches).")
+        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} lignes).")
 
         # ====================================================
-        # 3. SYNCHRONISATION VERS GOOGLE SHEETS
+        # 3. SYNCHRONISATION COMBINÉE VERS GOOGLE SHEETS
         # ====================================================
         if WEBHOOK_URL:
             print("\nSynchronisation des 2 effectifs avec Google Sheets...")
