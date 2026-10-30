@@ -55,23 +55,31 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (CLIC / NAVIGATION JOUEUR PAR JOUEUR)
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (PARCOURS INDIVIDUEL)
         # ====================================================
         print("\n--- Accès et extraction détaillée de l'effectif du camarade ---")
         page.goto(URL_CAMARADE_EFFECTIF)
         page.wait_for_timeout(8000)
 
-        # Récupération de tous les liens de joueurs présents sur la page du club
+        print("Défilement pour charger tous les joueurs...")
+        for _ in range(4):
+            page.keyboard.press("PageDown")
+            page.wait_for_timeout(1000)
+
+        # Recherche élargie de tous les liens pointant vers des fiches de joueurs
         player_links = []
-        links_locator = page.locator("a[href*='joueur']")
+        links_locator = page.locator("a")
         count = links_locator.count()
         
         for i in range(count):
-            href = links_locator.nth(i).get_attribute("href")
-            if href and href not in player_links:
-                player_links.append(href)
+            try:
+                href = links_locator.nth(i).get_attribute("href")
+                if href and ("#joueur" in href or "joueur" in href) and href not in player_links:
+                    player_links.append(href)
+            except Exception:
+                continue
 
-        print(f"{len(player_links)} joueurs détectés chez le camarade. Extraction des détails...")
+        print(f"{len(player_links)} joueurs détectés chez le camarade. Extraction des fiches...")
 
         data_camarade = []
         seen_camarade = set()
@@ -80,10 +88,10 @@ def run():
             try:
                 full_url = f"https://www.virtuafoot.com/{link}" if not link.startswith("http") else link
                 page.goto(full_url)
-                page.wait_for_timeout(2000) # Laisse charger la fiche du joueur
+                page.wait_for_timeout(2000)
 
-                # Extraction des blocs de statistiques de la fiche du joueur
-                stat_blocks = page.locator("div[class*='css-g5y9jx'], div[class*='row'], table tr").all()
+                # Extraction des informations de la fiche du joueur
+                stat_blocks = page.locator("div[class*='css-g5y9jx'], div[class*='row']").all()
                 player_data = []
                 
                 for block in stat_blocks:
@@ -92,11 +100,16 @@ def run():
                         sub_lines = [s.strip() for s in t.split("\n") if s.strip()]
                         player_data.extend(sub_lines)
 
-                if player_data:
-                    row_tuple = tuple(player_data)
+                # Nettoyage et formatage à plat pour la ligne du tableau
+                flat_player = []
+                for item in player_data:
+                    flat_player.extend([sub.strip() for sub in item.split("\n") if sub.strip()])
+
+                if len(flat_player) >= 4:
+                    row_tuple = tuple(flat_player)
                     if row_tuple not in seen_camarade:
                         seen_camarade.add(row_tuple)
-                        data_camarade.append(player_data)
+                        data_camarade.append(flat_player)
             except Exception as e:
                 print(f"Erreur sur un joueur : {e}")
                 continue
