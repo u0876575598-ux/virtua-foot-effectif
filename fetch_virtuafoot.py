@@ -67,22 +67,20 @@ def run():
             page.wait_for_timeout(1000)
 
         data_camarade = []
-        rows_camarade = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
-        if not rows_camarade:
-            rows_camarade = page.locator("div[class*='css-g5y9jx']").all()
-
-        seen_rows_camarade = set()
+        
+        # Ciblage spécifique pour la page de club (tableaux ou lignes de joueurs adverses)
+        rows_camarade = page.locator("table tr, div[class*='row'], div[class*='player'], .tableau tr").all()
+        
         for row in rows_camarade:
             text = row.inner_text().strip()
             if text:
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if 5 <= len(lines) <= 25:
-                    row_tuple = tuple(lines)
-                    if row_tuple not in seen_rows_camarade:
-                        seen_rows_camarade.add(row_tuple)
-                        data_camarade.append(lines)
+                cols = [c.strip() for c in text.split("\n") if c.strip()]
+                if len(cols) >= 2:
+                    data_camarade.append(cols)
 
-        if not data_camarade:
+        # Méthode de secours si le tableau HTML ne donne rien
+        if len(data_camarade) <= 1:
+            print("Utilisation de la méthode de secours textuelle pour le camarade...")
             content_text = page.locator("#content, #divbody").inner_text()
             for line in content_text.split("\n"):
                 cleaned = line.strip()
