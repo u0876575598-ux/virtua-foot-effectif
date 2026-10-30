@@ -55,7 +55,7 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (SÉLECTEUR ÉLARGI)
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (AVEC FILTRE STRICT)
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
@@ -67,7 +67,6 @@ def run():
             page.wait_for_timeout(1000)
 
         data_camarade = []
-        # On cible tous les blocs potentiels de la page du club (divs structurés)
         player_blocks = page.locator("div[class*='css-'], div[class*='row']").all()
         
         seen_camarade = set()
@@ -76,8 +75,14 @@ def run():
                 text = block.inner_text().strip()
                 if text:
                     lines = [l.strip() for l in text.split("\n") if l.strip()]
-                    # Filtrage pour récupérer les lignes contenant des attributs de joueurs
-                    if 4 <= len(lines) <= 25:
+                    
+                    # FILTRE : On exclut les menus et blocs généraux du club
+                    joined_text = " ".join(lines).upper()
+                    if any(keyword in joined_text for keyword in ["STADIUM", "LEVEL", "AWARDS", "RATING", "TRANSFERS", "SCORERS"]):
+                        continue
+
+                    # On garde uniquement les lignes de taille cohérente pour un joueur
+                    if 5 <= len(lines) <= 20:
                         row_tuple = tuple(lines)
                         if row_tuple not in seen_camarade:
                             seen_camarade.add(row_tuple)
@@ -88,7 +93,7 @@ def run():
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerows(data_camarade)
-        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} lignes).")
+        print(f"Fichier virtuafoot_effectif_camarade.csv généré ({len(data_camarade)} lignes filtrées).")
 
         # ====================================================
         # 3. SYNCHRONISATION COMBINÉE VERS GOOGLE SHEETS
