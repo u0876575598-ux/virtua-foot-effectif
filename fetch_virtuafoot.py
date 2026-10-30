@@ -8,7 +8,7 @@ USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
 WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
-URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237"
+URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
 
 def run():
     with sync_playwright() as p:
@@ -59,15 +59,7 @@ def run():
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
-        page.wait_for_timeout(5000)
-
-        # Clic sur l'onglet "Effectif" du club de ton camarade
-        try:
-            print("Clic sur l'onglet Effectif du club...")
-            page.locator("text=Effectif").first.click()
-            page.wait_for_timeout(5000)
-        except Exception as e:
-            print(f"Impossible de cliquer automatiquement sur l'onglet Effectif : {e}")
+        page.wait_for_timeout(7000)
 
         print("Défilement de la page pour charger les données...")
         for _ in range(3):
