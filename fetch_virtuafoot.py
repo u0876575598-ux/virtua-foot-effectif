@@ -10,14 +10,25 @@ WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
 URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
 
-def clean_and_format_rows(raw_rows):
-    """Nettoie et uniformise les lignes pour s'assurer d'une structure tabulaire propre."""
-    formatted_data = []
-    for lines in raw_rows:
-        # On s'assure qu'on a un minimum d'informations par joueur
-        if len(lines) >= 3:
-            formatted_data.append(lines)
-    return formatted_data
+def clean_rows(raw_blocks):
+    """Transforme chaque bloc trouvé en une liste propre de colonnes/cellules."""
+    cleaned = []
+    for block in raw_blocks:
+        if isinstance(block, list):
+            # Si le bloc contient déjà des lignes, on les rassemble ou on garde les lignes valides
+            flat_lines = []
+            for item in block:
+                if isinstance(item, str):
+                    flat_lines.extend([sub.strip() for sub in item.split("\n") if sub.strip()])
+                else:
+                    flat_lines.append(str(item))
+            if flat_lines:
+                cleaned.append(flat_lines)
+        elif isinstance(block, str):
+            lines = [l.strip() for l in block.split("\n") if l.strip()]
+            if lines:
+                cleaned.append(lines)
+    return cleaned
 
 def run():
     with sync_playwright() as p:
@@ -58,7 +69,7 @@ def run():
                         seen_rows.add(row_tuple)
                         data_perso_raw.append(lines)
 
-        data_perso = clean_and_format_rows(data_perso_raw)
+        data_perso = clean_rows(data_perso_raw)
 
         with open("virtuafoot_effectif.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -92,7 +103,7 @@ def run():
                     if any(keyword in joined_text for keyword in ["STADIUM", "LEVEL", "AWARDS", "RATING", "TRANSFERS", "SCORERS"]):
                         continue
 
-                    if 4 <= len(lines) <= 20:
+                    if 4 <= len(lines) <= 25:
                         row_tuple = tuple(lines)
                         if row_tuple not in seen_camarade:
                             seen_camarade.add(row_tuple)
@@ -100,7 +111,7 @@ def run():
             except Exception:
                 continue
 
-        data_camarade = clean_and_format_rows(data_camarade_raw)
+        data_camarade = clean_rows(data_camarade_raw)
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
