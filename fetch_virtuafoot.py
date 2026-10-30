@@ -78,10 +78,10 @@ def run():
                 if len(cols) >= 2:
                     data_camarade.append(cols)
 
-        # Méthode de secours si le tableau HTML ne donne rien
+        # Méthode de secours si le tableau HTML ne donne rien (avec .first pour éviter le conflit strict)
         if len(data_camarade) <= 1:
             print("Utilisation de la méthode de secours textuelle pour le camarade...")
-            content_text = page.locator("#content, #divbody").inner_text()
+            content_text = page.locator("#content, #divbody").first.inner_text()
             for line in content_text.split("\n"):
                 cleaned = line.strip()
                 if cleaned:
