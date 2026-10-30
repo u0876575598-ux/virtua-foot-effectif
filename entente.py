@@ -44,7 +44,7 @@ def run():
         for poste in postes:
             print(f"--- Inspection de l'onglet : {poste} ---")
             try:
-                # Clic propre sur l'onglet du poste
+                # Clic propre sur l'onglet du poste via son texte
                 page.evaluate(f"""
                     const tabs = Array.from(document.querySelectorAll('div, span, a')).filter(el => el.textContent.trim().toUpperCase() === '{poste}');
                     if (tabs.length > 0) {{ tabs[0].click(); }}
@@ -54,36 +54,38 @@ def run():
                 print(f"Erreur onglet {poste}: {e}")
                 continue
 
-            # On récupère précisément le nombre de lignes de joueurs dans l'onglet
+            # On récupère le nombre de joueurs dans cet onglet en cherchant les boutons radio de sélection
             player_count = page.evaluate("""
                 () => {
-                    const rows = Array.from(document.querySelectorAll("div[class*='css-g5y9jx']"));
-                    return rows.filter(r => r.innerText.includes("%") && !r.innerText.includes("STADIUM") && !r.innerText.includes("VF Index")).length;
+                    const radios = document.querySelectorAll("input[type='radio']");
+                    return radios.length;
                 }
             """)
 
-            print(f"Vrais joueurs interactifs trouvés pour {poste} : {player_count}")
+            print(f"Joueurs détectés pour {poste} : {player_count}")
 
             for i in range(player_count):
                 try:
-                    # On clique sur chaque joueur un par un pour charger ses données dynamiques
-                    row_data = page.evaluate(f"""
+                    # On clique sur le bouton radio du joueur i pour charger ses stats
+                    row_text = page.evaluate(f"""
                         () => {{
-                            const rows = Array.from(document.querySelectorAll("div[class*='css-g5y9jx']"));
-                            const validRows = rows.filter(r => r.innerText.includes("%") && !r.innerText.includes("STADIUM") && !r.innerText.includes("VF Index"));
-                            if (validRows[{i}]) {{
-                                validRows[{i}].click();
-                                return validRows[{i}].innerText.trim();
+                            const radios = document.querySelectorAll("input[type='radio']");
+                            if (radios[{i}]) {{
+                                // On remonte au conteneur de la ligne pour cliquer dessus et récupérer tout le texte utile
+                                let container = radios[{i}].closest("div[class*='css-']");
+                                if (!container) container = radios[{i}].parentElement;
+                                container.click();
+                                return container.innerText.trim();
                             }}
                             return "";
                         }}
                     """)
 
-                    # Pause pour laisser React mettre à jour les caractéristiques du joueur cliqué
+                    # Pause pour laisser le temps à React de rafraîchir les données
                     page.wait_for_timeout(1000)
 
-                    if row_data:
-                        lines = [l.strip() for l in row_data.split("\n") if l.strip()]
+                    if row_text:
+                        lines = [l.strip() for l in row_text.split("\n") if l.strip()]
                         
                         player_name = ""
                         percentage = ""
