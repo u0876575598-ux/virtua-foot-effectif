@@ -55,11 +55,11 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (TABLEAUX HTML)
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
-        page.wait_for_timeout(7000)
+        page.wait_for_timeout(8000)
 
         print("Défilement de la page pour charger les données...")
         for _ in range(3):
@@ -67,20 +67,20 @@ def run():
             page.wait_for_timeout(1000)
 
         data_camarade = []
-        rows_camarade = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
-        if not rows_camarade:
-            rows_camarade = page.locator("div[class*='css-g5y9jx']").all()
-
-        seen_rows_camarade = set()
-        for row in rows_camarade:
+        # Ciblage des lignes de tableau HTML standard (tr) utilisées sur les pages de clubs tiers
+        table_rows = page.locator("table tr").all()
+        
+        seen_camarade = set()
+        for row in table_rows:
             text = row.inner_text().strip()
             if text:
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if 5 <= len(lines) <= 25:
-                    row_tuple = tuple(lines)
-                    if row_tuple not in seen_rows_camarade:
-                        seen_rows_camarade.add(row_tuple)
-                        data_camarade.append(lines)
+                cols = [c.strip() for c in text.split("\n") if c.strip()]
+                # On filtre pour garder les lignes de joueurs qui contiennent plusieurs colonnes de données
+                if len(cols) >= 3:
+                    row_tuple = tuple(cols)
+                    if row_tuple not in seen_camarade:
+                        seen_camarade.add(row_tuple)
+                        data_camarade.append(cols)
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
