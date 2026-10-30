@@ -8,7 +8,8 @@ USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
 WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
-URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237"
+# URL combinée pour aller directement sur la vue "niveau" de l'effectif du camarade
+URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
 
 def run():
     with sync_playwright() as p:
@@ -55,44 +56,28 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (AVEC &view=niv)
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
         page.wait_for_timeout(7000)
 
-        print("Défilement de la page pour charger les données...")
-        for _ in range(4):
-            page.keyboard.press("PageDown")
-            page.wait_for_timeout(1000)
-
         data_camarade = []
+        rows_camarade = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
         
-        # Ciblage précis des lignes de joueurs basées sur la structure de la page club
-        # On recherche les conteneurs de lignes de joueurs en bas de page
-        player_rows = page.locator("div[class*='css-g5y9jx'], tr, .row-joueur").all()
-        
-        seen_camarade = set()
-        for row in player_rows:
+        if not rows_camarade:
+            rows_camarade = page.locator("div[class*='css-g5y9jx']").all()
+
+        seen_rows_camarade = set()
+        for row in rows_camarade:
             text = row.inner_text().strip()
             if text:
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
-                # Filtrer pour ne garder que les lignes qui ressemblent à un joueur (ex: présence d'un poste, d'un âge ou d'une note)
-                if 3 <= len(lines) <= 20:
+                if 5 <= len(lines) <= 25:
                     row_tuple = tuple(lines)
-                    if row_tuple not in seen_camarade:
-                        seen_camarade.add(row_tuple)
+                    if row_tuple not in seen_rows_camarade:
+                        seen_rows_camarade.add(row_tuple)
                         data_camarade.append(lines)
-
-        # Si l'extraction par blocs ne donne rien, on filtre les lignes pertinentes du texte global au lieu de tout prendre
-        if not data_camarade:
-            print("Filtrage alternatif des données de la page du camarade...")
-            content_text = page.locator("#content, #divbody").first.inner_text()
-            for line in content_text.split("\n"):
-                cleaned = line.strip()
-                # On évite de reprendre les menus du haut
-                if cleaned and cleaned not in ["CLUB", "STADIUM", "GAMES", "FACILITIES", "TRANSFERS", "SCORERS", "JERSEYS", "HISTORY"]:
-                    data_camarade.append([cleaned])
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
