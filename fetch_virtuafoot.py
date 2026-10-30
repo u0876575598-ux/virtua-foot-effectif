@@ -8,7 +8,6 @@ USERNAME = os.environ.get("VF_USERNAME")
 PASSWORD = os.environ.get("VF_PASSWORD")
 WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
-# Liste statique des URL de l'effectif du camarade
 URLS_CAMARADE = [
     "https://www.virtuafoot.com/#joueur?jid=584853",
     "https://www.virtuafoot.com/#joueur?jid=552785",
@@ -40,19 +39,12 @@ URLS_CAMARADE = [
 ]
 
 def clean_rows(raw_blocks):
-    """Nettoie et aplatit les blocs pour obtenir des lignes tabulaires propres."""
     cleaned = []
     seen = set()
     for block in raw_blocks:
         if isinstance(block, list):
-            flat_lines = []
-            for item in block:
-                if isinstance(item, str):
-                    flat_lines.extend([sub.strip() for sub in item.split("\n") if sub.strip()])
-                else:
-                    flat_lines.append(str(item))
-            # On élargit la plage pour accepter les fiches individuelles détaillées
-            if 3 <= len(flat_lines) <= 60:
+            flat_lines = [item.strip() for item in block if item.strip()]
+            if 3 <= len(flat_lines) <= 100:
                 row_tuple = tuple(flat_lines)
                 if row_tuple not in seen:
                     seen.add(row_tuple)
@@ -67,7 +59,6 @@ def run():
         print("Connexion à Virtuafoot...")
         page.goto("https://www.virtuafoot.com/")
 
-        # Identification
         page.fill("form#login input[type='text'], form#login input[name='login'], input[name='login']", USERNAME)
         page.fill("form#login input[type='password'], form#login input[name='pass'], input[name='pass']", PASSWORD)
         page.locator("form#login button[type='submit'], form#login input[type='submit'], button:has-text('Connexion')").first.click()
@@ -102,7 +93,7 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (PAR URL DE JOUEUR)
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE VIA LA CLASSE EXACTE
         # ====================================================
         print(f"\n--- Extraction des {len(URLS_CAMARADE)} joueurs du camarade ---")
         data_camarade_raw = []
@@ -110,11 +101,12 @@ def run():
         for url in URLS_CAMARADE:
             try:
                 page.goto(url)
-                page.wait_for_timeout(2500) # Laisse le temps à la fiche du joueur de charger
+                page.wait_for_timeout(2500)
 
-                player_blocks = page.locator("div[class*='css-g5y9jx'], div[class*='row'], table tr").all()
+                # Utilisation de la classe exacte repérée sur l'élément
+                stat_blocks = page.locator("div[class*='css-g5y9jx']").all()
                 player_lines = []
-                for block in player_blocks:
+                for block in stat_blocks:
                     t = block.inner_text().strip()
                     if t:
                         sub = [s.strip() for s in t.split("\n") if s.strip()]
@@ -122,6 +114,12 @@ def run():
 
                 if player_lines:
                     data_camarade_raw.append(player_lines)
+                else:
+                    # Fallback de secours si le bloc spécifique ne renvoie rien : tout le texte de la page
+                    body_text = page.locator("body").inner_text()
+                    if body_text:
+                        lines = [l.strip() for l in body_text.split("\n") if l.strip()]
+                        data_camarade_raw.append(lines)
             except Exception as e:
                 print(f"Erreur sur l'URL {url}: {e}")
 
