@@ -10,6 +10,15 @@ WEBHOOK_URL = os.environ.get("GOOGLE_WEBHOOK_URL")
 
 URL_CAMARADE = "https://www.virtuafoot.com/#club?uid=689237&view=niv"
 
+def clean_and_format_rows(raw_rows):
+    """Nettoie et uniformise les lignes pour s'assurer d'une structure tabulaire propre."""
+    formatted_data = []
+    for lines in raw_rows:
+        # On s'assure qu'on a un minimum d'informations par joueur
+        if len(lines) >= 3:
+            formatted_data.append(lines)
+    return formatted_data
+
 def run():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -33,7 +42,7 @@ def run():
         page.goto("https://www.virtuafoot.com/#joueurs?view=niv")
         page.wait_for_timeout(7000)
 
-        data_perso = []
+        data_perso_raw = []
         rows = page.locator("div[class*='css-g5y9jx'][style*='background-color']").all()
         if not rows:
             rows = page.locator("div[class*='css-g5y9jx']").all()
@@ -43,11 +52,13 @@ def run():
             text = row.inner_text().strip()
             if text:
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if 5 <= len(lines) <= 25:
+                if 4 <= len(lines) <= 25:
                     row_tuple = tuple(lines)
                     if row_tuple not in seen_rows:
                         seen_rows.add(row_tuple)
-                        data_perso.append(lines)
+                        data_perso_raw.append(lines)
+
+        data_perso = clean_and_format_rows(data_perso_raw)
 
         with open("virtuafoot_effectif.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -55,7 +66,7 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (AVEC FILTRE STRICT)
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
@@ -66,7 +77,7 @@ def run():
             page.keyboard.press("PageDown")
             page.wait_for_timeout(1000)
 
-        data_camarade = []
+        data_camarade_raw = []
         player_blocks = page.locator("div[class*='css-'], div[class*='row']").all()
         
         seen_camarade = set()
@@ -76,19 +87,20 @@ def run():
                 if text:
                     lines = [l.strip() for l in text.split("\n") if l.strip()]
                     
-                    # FILTRE : On exclut les menus et blocs généraux du club
+                    # Filtre anti-menus du club
                     joined_text = " ".join(lines).upper()
                     if any(keyword in joined_text for keyword in ["STADIUM", "LEVEL", "AWARDS", "RATING", "TRANSFERS", "SCORERS"]):
                         continue
 
-                    # On garde uniquement les lignes de taille cohérente pour un joueur
-                    if 5 <= len(lines) <= 20:
+                    if 4 <= len(lines) <= 20:
                         row_tuple = tuple(lines)
                         if row_tuple not in seen_camarade:
                             seen_camarade.add(row_tuple)
-                            data_camarade.append(lines)
+                            data_camarade_raw.append(lines)
             except Exception:
                 continue
+
+        data_camarade = clean_and_format_rows(data_camarade_raw)
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
