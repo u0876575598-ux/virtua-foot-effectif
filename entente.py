@@ -23,7 +23,7 @@ def run():
         page.wait_for_url("**/#*", timeout=15000)
         print("Connecté avec succès !")
 
-        # Accès à la page de l'entente
+        # Accès à la page de sélection
         print("Accès à la page de sélection...")
         page.goto("https://www.virtuafoot.com/#entente?selectionneur_selectionner")
         page.wait_for_timeout(8000)
@@ -44,7 +44,7 @@ def run():
         for poste in postes:
             print(f"--- Inspection de l'onglet : {poste} ---")
             try:
-                # Clic propre sur l'onglet du poste via son texte
+                # Clic propre sur l'onglet du poste
                 page.evaluate(f"""
                     const tabs = Array.from(document.querySelectorAll('div, span, a')).filter(el => el.textContent.trim().toUpperCase() === '{poste}');
                     if (tabs.length > 0) {{ tabs[0].click(); }}
@@ -54,11 +54,11 @@ def run():
                 print(f"Erreur onglet {poste}: {e}")
                 continue
 
-            # On récupère le nombre de joueurs dans cet onglet en cherchant les boutons radio de sélection
+            # On compte les lignes de joueurs en cherchant les blocs du tableau central qui affichent un pourcentage
             player_count = page.evaluate("""
                 () => {
-                    const radios = document.querySelectorAll("input[type='radio']");
-                    return radios.length;
+                    const elements = Array.from(document.querySelectorAll("div[class*='css-g5y9jx']"));
+                    return elements.filter(el => el.innerText.includes("%") && !el.innerText.includes("STADIUM") && !el.innerText.includes("VF Index")).length;
                 }
             """)
 
@@ -66,22 +66,20 @@ def run():
 
             for i in range(player_count):
                 try:
-                    # On clique sur le bouton radio du joueur i pour charger ses stats
+                    # On clique sur chaque ligne de joueur pour charger ses caractéristiques
                     row_text = page.evaluate(f"""
                         () => {{
-                            const radios = document.querySelectorAll("input[type='radio']");
-                            if (radios[{i}]) {{
-                                // On remonte au conteneur de la ligne pour cliquer dessus et récupérer tout le texte utile
-                                let container = radios[{i}].closest("div[class*='css-']");
-                                if (!container) container = radios[{i}].parentElement;
-                                container.click();
-                                return container.innerText.trim();
+                            const elements = Array.from(document.querySelectorAll("div[class*='css-g5y9jx']"));
+                            const validRows = elements.filter(el => el.innerText.includes("%") && !el.innerText.includes("STADIUM") && !el.innerText.includes("VF Index"));
+                            if (validRows[{i}]) {{
+                                validRows[{i}].click();
+                                return validRows[{i}].innerText.trim();
                             }}
                             return "";
                         }}
                     """)
 
-                    # Pause pour laisser le temps à React de rafraîchir les données
+                    # Pause pour laisser React mettre à jour les données après le clic
                     page.wait_for_timeout(1000)
 
                     if row_text:
