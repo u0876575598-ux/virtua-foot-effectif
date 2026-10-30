@@ -55,32 +55,35 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (TABLEAUX HTML)
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (SÉLECTEUR ÉLARGI)
         # ====================================================
         print("\n--- Accès et extraction de l'effectif du camarade ---")
         page.goto(URL_CAMARADE)
         page.wait_for_timeout(8000)
 
         print("Défilement de la page pour charger les données...")
-        for _ in range(3):
+        for _ in range(4):
             page.keyboard.press("PageDown")
             page.wait_for_timeout(1000)
 
         data_camarade = []
-        # Ciblage des lignes de tableau HTML standard (tr) utilisées sur les pages de clubs tiers
-        table_rows = page.locator("table tr").all()
+        # On cible tous les blocs potentiels de la page du club (divs structurés)
+        player_blocks = page.locator("div[class*='css-'], div[class*='row']").all()
         
         seen_camarade = set()
-        for row in table_rows:
-            text = row.inner_text().strip()
-            if text:
-                cols = [c.strip() for c in text.split("\n") if c.strip()]
-                # On filtre pour garder les lignes de joueurs qui contiennent plusieurs colonnes de données
-                if len(cols) >= 3:
-                    row_tuple = tuple(cols)
-                    if row_tuple not in seen_camarade:
-                        seen_camarade.add(row_tuple)
-                        data_camarade.append(cols)
+        for block in player_blocks:
+            try:
+                text = block.inner_text().strip()
+                if text:
+                    lines = [l.strip() for l in text.split("\n") if l.strip()]
+                    # Filtrage pour récupérer les lignes contenant des attributs de joueurs
+                    if 4 <= len(lines) <= 25:
+                        row_tuple = tuple(lines)
+                        if row_tuple not in seen_camarade:
+                            seen_camarade.add(row_tuple)
+                            data_camarade.append(lines)
+            except Exception:
+                continue
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
