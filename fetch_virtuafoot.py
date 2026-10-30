@@ -62,29 +62,36 @@ def run():
         page.wait_for_timeout(7000)
 
         print("Défilement de la page pour charger les données...")
-        for _ in range(3):
+        for _ in range(4):
             page.keyboard.press("PageDown")
             page.wait_for_timeout(1000)
 
         data_camarade = []
         
-        # Ciblage spécifique pour la page de club (tableaux ou lignes de joueurs adverses)
-        rows_camarade = page.locator("table tr, div[class*='row'], div[class*='player'], .tableau tr").all()
+        # Ciblage précis des lignes de joueurs basées sur la structure de la page club
+        # On recherche les conteneurs de lignes de joueurs en bas de page
+        player_rows = page.locator("div[class*='css-g5y9jx'], tr, .row-joueur").all()
         
-        for row in rows_camarade:
+        seen_camarade = set()
+        for row in player_rows:
             text = row.inner_text().strip()
             if text:
-                cols = [c.strip() for c in text.split("\n") if c.strip()]
-                if len(cols) >= 2:
-                    data_camarade.append(cols)
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
+                # Filtrer pour ne garder que les lignes qui ressemblent à un joueur (ex: présence d'un poste, d'un âge ou d'une note)
+                if 3 <= len(lines) <= 20:
+                    row_tuple = tuple(lines)
+                    if row_tuple not in seen_camarade:
+                        seen_camarade.add(row_tuple)
+                        data_camarade.append(lines)
 
-        # Méthode de secours si le tableau HTML ne donne rien (avec .first pour éviter le conflit strict)
-        if len(data_camarade) <= 1:
-            print("Utilisation de la méthode de secours textuelle pour le camarade...")
+        # Si l'extraction par blocs ne donne rien, on filtre les lignes pertinentes du texte global au lieu de tout prendre
+        if not data_camarade:
+            print("Filtrage alternatif des données de la page du camarade...")
             content_text = page.locator("#content, #divbody").first.inner_text()
             for line in content_text.split("\n"):
                 cleaned = line.strip()
-                if cleaned:
+                # On évite de reprendre les menus du haut
+                if cleaned and cleaned not in ["CLUB", "STADIUM", "GAMES", "FACILITIES", "TRANSFERS", "SCORERS", "JERSEYS", "HISTORY"]:
                     data_camarade.append([cleaned])
 
         with open("virtuafoot_effectif_camarade.csv", mode="w", newline="", encoding="utf-8") as f:
