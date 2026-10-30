@@ -44,7 +44,7 @@ def clean_rows(raw_blocks):
     for block in raw_blocks:
         if isinstance(block, list):
             flat_lines = [item.strip() for item in block if item.strip()]
-            if 3 <= len(flat_lines) <= 100:
+            if 3 <= len(flat_lines) <= 150:
                 row_tuple = tuple(flat_lines)
                 if row_tuple not in seen:
                     seen.add(row_tuple)
@@ -93,7 +93,7 @@ def run():
         print(f"Fichier virtuafoot_effectif.csv généré ({len(data_perso)} lignes).")
 
         # ====================================================
-        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE VIA LA CLASSE EXACTE
+        # 2. EXTRACTION DE L'EFFECTIF DU CAMARADE (AVEC CHARGEMENT ACTIF)
         # ====================================================
         print(f"\n--- Extraction des {len(URLS_CAMARADE)} joueurs du camarade ---")
         data_camarade_raw = []
@@ -101,9 +101,10 @@ def run():
         for url in URLS_CAMARADE:
             try:
                 page.goto(url)
-                page.wait_for_timeout(2500)
+                # Attente active que le contenu de la fiche soit chargé dans le DOM
+                page.wait_for_selector("div[class*='css-g5y9jx']", timeout=10000)
+                page.wait_for_timeout(1000)
 
-                # Utilisation de la classe exacte repérée sur l'élément
                 stat_blocks = page.locator("div[class*='css-g5y9jx']").all()
                 player_lines = []
                 for block in stat_blocks:
@@ -115,7 +116,6 @@ def run():
                 if player_lines:
                     data_camarade_raw.append(player_lines)
                 else:
-                    # Fallback de secours si le bloc spécifique ne renvoie rien : tout le texte de la page
                     body_text = page.locator("body").inner_text()
                     if body_text:
                         lines = [l.strip() for l in body_text.split("\n") if l.strip()]
