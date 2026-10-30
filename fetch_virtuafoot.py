@@ -51,7 +51,8 @@ def clean_rows(raw_blocks):
                     flat_lines.extend([sub.strip() for sub in item.split("\n") if sub.strip()])
                 else:
                     flat_lines.append(str(item))
-            if 3 <= len(flat_lines) <= 25:
+            # On élargit la plage pour accepter les fiches individuelles détaillées
+            if 3 <= len(flat_lines) <= 60:
                 row_tuple = tuple(flat_lines)
                 if row_tuple not in seen:
                     seen.add(row_tuple)
